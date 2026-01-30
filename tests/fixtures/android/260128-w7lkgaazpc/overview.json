@@ -1,0 +1,131 @@
+{
+  "analysis": {
+    "score": 6,
+    "tags": [
+      "android",
+      "defense_evasion"
+    ]
+  },
+  "build": "da3e3b7",
+  "sample": {
+    "completed": "2026-01-28T18:34:57Z",
+    "created": "2026-01-28T18:33:48Z",
+    "id": "260128-w7lkgaazpc",
+    "md5": "2c3a161ad69513fca35c33bc073e1b89",
+    "score": 6,
+    "sha1": "7b7475a227aadad8ab88ec0b1e8f7e1a8aa3f04e",
+    "sha256": "754047d498be897448d2ee9d0694e7b1d14f8cb33f145a69ba419d4a367ba84a",
+    "sha512": "929c685059a4eb6d1b56a6070c4f38c351519f41dcc7577776cd5129536327c1359da6e70f3934f221567ded5c21c8a0dd047836f35c3d42041cb2fe85a0309e",
+    "size": 2416704,
+    "ssdeep": "49152:8kxHpwbqjsNGStJPbN+WAXNct5c1mMR95jMtWabQMz5unufz:PIG4p0NI5c1Z5gNFgcz",
+    "target": "foto.apk",
+    "user_tags": [
+      "src:urlscan",
+      "task.uuid:019c04a5-a198-71d0-8864-969b320010eb",
+      "task.url:https://is.gd/yf6JUX"
+    ]
+  },
+  "signatures": [
+    {
+      "desc": "Applies obfuscation techniques to the APK format in order to hinder analysis",
+      "name": "Attempts to obfuscate APK file format",
+      "score": 6
+    },
+    {
+      "desc": "Checks the application is allowed to install additional applications (Might try to install applications from unknown sources).",
+      "label": "check_applications_installation",
+      "name": "Checks the application is allowed to request package installs through the package installer",
+      "score": 6,
+      "tags": [
+        "defense_evasion"
+      ],
+      "ttp": [
+        "T1632.001"
+      ]
+    },
+    {
+      "name": "Requests dangerous framework permissions",
+      "score": 6
+    },
+    {
+      "desc": "Checks for missing APK codesign signature.",
+      "label": "unsigned_apk",
+      "name": "Unsigned APK",
+      "score": 3
+    }
+  ],
+  "targets": [
+    {
+      "iocs": {
+        "domains": [
+          "www.youtube.com",
+          "android.apis.google.com",
+          "ssl.google-analytics.com"
+        ],
+        "ips": [
+          "224.0.0.251",
+          "1.1.1.1",
+          "142.250.151.95",
+          "142.251.167.91",
+          "142.250.151.138",
+          "142.251.45.174",
+          "142.250.80.110",
+          "142.250.190.232"
+        ]
+      },
+      "md5": "2c3a161ad69513fca35c33bc073e1b89",
+      "score": 6,
+      "sha1": "7b7475a227aadad8ab88ec0b1e8f7e1a8aa3f04e",
+      "sha256": "754047d498be897448d2ee9d0694e7b1d14f8cb33f145a69ba419d4a367ba84a",
+      "sha512": "929c685059a4eb6d1b56a6070c4f38c351519f41dcc7577776cd5129536327c1359da6e70f3934f221567ded5c21c8a0dd047836f35c3d42041cb2fe85a0309e",
+      "signatures": [
+        {
+          "desc": "Checks the application is allowed to install additional applications (Might try to install applications from unknown sources).",
+          "label": "check_applications_installation",
+          "name": "Checks the application is allowed to request package installs through the package installer",
+          "score": 6,
+          "tags": [
+            "defense_evasion"
+          ],
+          "ttp": [
+            "T1632.001"
+          ]
+        }
+      ],
+      "size": 2416704,
+      "ssdeep": "49152:8kxHpwbqjsNGStJPbN+WAXNct5c1mMR95jMtWabQMz5unufz:PIG4p0NI5c1Z5gNFgcz",
+      "tags": [
+        "defense_evasion"
+      ],
+      "target": "foto.apk",
+      "tasks": [
+        "behavioral1"
+      ]
+    }
+  ],
+  "tasks": {
+    "260128-w7lkgaazpc-behavioral1": {
+      "backend": "sbx4m101",
+      "kind": "behavioral",
+      "name": "behavioral1",
+      "os": "android-11-x64",
+      "resource": "android-x64-arm64-20260115-en",
+      "score": 6,
+      "sigs": 1,
+      "status": "reported",
+      "tags": [
+        "defense_evasion"
+      ],
+      "target": "foto.apk",
+      "timeout": 60
+    },
+    "260128-w7lkgaazpc-static1": {
+      "kind": "static",
+      "name": "static1",
+      "score": 6,
+      "sigs": 3,
+      "status": "reported"
+    }
+  },
+  "version": "0.3.1"
+}

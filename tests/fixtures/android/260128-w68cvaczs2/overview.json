@@ -1,0 +1,176 @@
+{
+  "analysis": {
+    "score": 7,
+    "tags": [
+      "android",
+      "evasion",
+      "impact"
+    ]
+  },
+  "build": "da3e3b7",
+  "sample": {
+    "completed": "2026-01-28T18:34:16Z",
+    "created": "2026-01-28T18:33:08Z",
+    "id": "260128-w68cvaczs2",
+    "md5": "542b659d64ad53f1de1ecfaf1eddddc3",
+    "score": 7,
+    "sha1": "fe5eaf6734dcb360c8992ca4028255206b49cfe9",
+    "sha256": "58aabfc0bf8f04f262899888d94b51d195fb0f0ba58122a83d6dd8278b07d9b6",
+    "sha512": "75b2c3498d34e757890169d41560db0f848a9e2853145c5796f9a599d0debdbad0bf0834f84df9462f0cd8aa9af7c36725d64fe0f5f2913c01f4ca06a864972e",
+    "size": 7737662,
+    "ssdeep": "98304:u7i0r9sYJbVsvHeJP3HebEFh3kVzDtyvD518JnHjyCv5bUoN/Bmdb3zSFHqct1fT:iJbQlbd14b5y9+CvOoxuWFHq41hCg",
+    "target": "mparivahan.apk",
+    "user_tags": [
+      "src:urlscan",
+      "task.uuid:019c04b3-c032-7590-b4ae-f8aa3f88a255",
+      "task.url:https://echallan-view.com/KA"
+    ]
+  },
+  "signatures": [
+    {
+      "desc": "Runs executable file dropped to the device during analysis.",
+      "name": "Loads dropped Dex/Jar",
+      "score": 7,
+      "tags": [
+        "evasion"
+      ],
+      "ttp": [
+        "T1407"
+      ]
+    },
+    {
+      "desc": "Applies obfuscation techniques to the APK format in order to hinder analysis",
+      "name": "Attempts to obfuscate APK file format",
+      "score": 6
+    },
+    {
+      "desc": "Legitimate web (hosting) services can be abused by malware authors to host malware or C2s.",
+      "label": "susp_dom_as_c2",
+      "name": "Contacts third-party web service commonly abused for C2",
+      "score": 6,
+      "ttp": [
+        "T1102"
+      ]
+    },
+    {
+      "name": "Requests dangerous framework permissions",
+      "score": 6
+    },
+    {
+      "label": "crypto_api",
+      "name": "Uses Crypto APIs (Might try to encrypt user data)",
+      "score": 4,
+      "tags": [
+        "impact"
+      ],
+      "ttp": [
+        "T1471"
+      ]
+    },
+    {
+      "desc": "Checks for missing APK codesign signature.",
+      "label": "unsigned_apk",
+      "name": "Unsigned APK",
+      "score": 3
+    }
+  ],
+  "targets": [
+    {
+      "iocs": {
+        "domains": [
+          "www.youtube.com",
+          "android.apis.google.com",
+          "pastebin.com"
+        ],
+        "ips": [
+          "224.0.0.251",
+          "172.217.168.202",
+          "1.1.1.1",
+          "142.250.139.91",
+          "142.250.179.206",
+          "142.250.139.100",
+          "142.250.139.139",
+          "172.66.171.73"
+        ],
+        "urls": [
+          "https://pastebin.com/raw/X0ZZAxgz",
+          "https://pastebin.com/raw/w3ExwBwv"
+        ]
+      },
+      "md5": "542b659d64ad53f1de1ecfaf1eddddc3",
+      "score": 7,
+      "sha1": "fe5eaf6734dcb360c8992ca4028255206b49cfe9",
+      "sha256": "58aabfc0bf8f04f262899888d94b51d195fb0f0ba58122a83d6dd8278b07d9b6",
+      "sha512": "75b2c3498d34e757890169d41560db0f848a9e2853145c5796f9a599d0debdbad0bf0834f84df9462f0cd8aa9af7c36725d64fe0f5f2913c01f4ca06a864972e",
+      "signatures": [
+        {
+          "desc": "Runs executable file dropped to the device during analysis.",
+          "name": "Loads dropped Dex/Jar",
+          "score": 7,
+          "tags": [
+            "evasion"
+          ],
+          "ttp": [
+            "T1407"
+          ]
+        },
+        {
+          "desc": "Legitimate web (hosting) services can be abused by malware authors to host malware or C2s.",
+          "label": "susp_dom_as_c2",
+          "name": "Contacts third-party web service commonly abused for C2",
+          "score": 6,
+          "ttp": [
+            "T1102"
+          ]
+        },
+        {
+          "label": "crypto_api",
+          "name": "Uses Crypto APIs (Might try to encrypt user data)",
+          "score": 4,
+          "tags": [
+            "impact"
+          ],
+          "ttp": [
+            "T1471"
+          ]
+        }
+      ],
+      "size": 7737662,
+      "ssdeep": "98304:u7i0r9sYJbVsvHeJP3HebEFh3kVzDtyvD518JnHjyCv5bUoN/Bmdb3zSFHqct1fT:iJbQlbd14b5y9+CvOoxuWFHq41hCg",
+      "tags": [
+        "evasion",
+        "impact"
+      ],
+      "target": "mparivahan.apk",
+      "tasks": [
+        "behavioral1"
+      ]
+    }
+  ],
+  "tasks": {
+    "260128-w68cvaczs2-behavioral1": {
+      "backend": "sbx4m104",
+      "kind": "behavioral",
+      "name": "behavioral1",
+      "os": "android-11-x64",
+      "resource": "android-x64-arm64-20251027-en",
+      "score": 7,
+      "sigs": 3,
+      "status": "reported",
+      "tags": [
+        "evasion",
+        "impact"
+      ],
+      "target": "mparivahan.apk",
+      "timeout": 60
+    },
+    "260128-w68cvaczs2-static1": {
+      "kind": "static",
+      "name": "static1",
+      "score": 6,
+      "sigs": 3,
+      "status": "reported"
+    }
+  },
+  "version": "0.3.1"
+}

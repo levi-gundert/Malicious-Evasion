@@ -1,0 +1,26 @@
+# GUI Dependencies for Evasion Artifact Placer
+
+# Kivy - Cross-platform GUI framework
+kivy>=2.2.0
+
+# Optional: KivyMD for Material Design widgets
+# kivymd>=1.1.1
+
+# Plyer - Native notifications and dialogs
+plyer>=2.1.0
+
+# Required for background updates (included in kivy.clock)
+# No additional scheduler needed - using Kivy Clock
+
+# Requests for API calls (also in main requirements.txt)
+requests>=2.28.0
+
+# PyYAML for config files
+pyyaml>=6.0
+
+# For secure API key storage on desktop
+keyring>=24.0.0
+
+# Build dependencies (for packaging only)
+# pyinstaller>=5.0  # Windows/Linux/macOS exe/app
+# buildozer>=1.4.0  # Android APK

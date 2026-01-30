@@ -1,0 +1,361 @@
+#:kivy 2.2.0
+
+# =============================================================================
+# Malicious Evasion Artifact Placer - Recorded Future Theme
+# =============================================================================
+#
+# Recorded Future Brand Colors:
+#   Primary Blue: #1A73E8 (action buttons)
+#   Accent Cyan: #00D4FF (highlights, links)
+#   Navy Dark: #0A1628 (background)
+#   Navy Surface: #122136 (cards, elevated)
+#   Navy Light: #1E3A5F (hover states)
+#   
+#   Text White: #FFFFFF
+#   Text Light: #E8EAED
+#   Text Muted: #9AA0A6
+#   
+#   Success: #34A853
+#   Warning: #FBBC04
+#   Error: #EA4335
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global Label Styling
+# -----------------------------------------------------------------------------
+<Label>:
+    color: 0.91, 0.918, 0.929, 1
+    font_size: "14sp"
+    text_size: self.size
+    halign: "left"
+    valign: "middle"
+
+# -----------------------------------------------------------------------------
+# Primary Button - Recorded Future Blue
+# Clean, flat design with subtle hover state
+# -----------------------------------------------------------------------------
+<Button>:
+    background_normal: ''
+    background_down: ''
+    background_disabled_normal: ''
+    background_color: 0, 0, 0, 0
+    color: 1, 1, 1, 1
+    font_size: "14sp"
+    bold: True
+    size_hint_y: None
+    height: "44dp"
+    canvas.before:
+        # Button background
+        Color:
+            rgba: (0.08, 0.38, 0.78, 1) if self.state == 'down' else ((0.2, 0.22, 0.25, 1) if self.disabled else (0.102, 0.451, 0.91, 1))
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+
+# -----------------------------------------------------------------------------
+# Secondary Button - Outlined style
+# -----------------------------------------------------------------------------
+<SecondaryButton@Button>:
+    color: 0, 0.831, 1, 1
+    canvas.before:
+        # Background
+        Color:
+            rgba: (0, 0.831, 1, 0.15) if self.state == 'down' else (0.071, 0.129, 0.212, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+        # Border
+        Color:
+            rgba: 0, 0.831, 1, 0.8
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, 6
+            width: 1.5
+
+# -----------------------------------------------------------------------------
+# Danger Button - Red for destructive actions
+# -----------------------------------------------------------------------------
+<DangerButton@Button>:
+    canvas.before:
+        Color:
+            rgba: (0.78, 0.2, 0.16, 1) if self.state == 'down' else (0.918, 0.263, 0.208, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+
+# -----------------------------------------------------------------------------
+# Success Button - Green
+# -----------------------------------------------------------------------------
+<SuccessButton@Button>:
+    canvas.before:
+        Color:
+            rgba: (0.16, 0.55, 0.26, 1) if self.state == 'down' else (0.204, 0.659, 0.325, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+
+# -----------------------------------------------------------------------------
+# Warning Button - Yellow/Amber
+# -----------------------------------------------------------------------------
+<WarningButton@Button>:
+    color: 0.04, 0.08, 0.15, 1
+    canvas.before:
+        Color:
+            rgba: (0.85, 0.65, 0.02, 1) if self.state == 'down' else (0.984, 0.737, 0.016, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+
+# -----------------------------------------------------------------------------
+# Ghost Button - Minimal, text-like
+# -----------------------------------------------------------------------------
+<GhostButton@Button>:
+    color: 0, 0.831, 1, 1
+    canvas.before:
+        Color:
+            rgba: (0, 0.831, 1, 0.1) if self.state == 'down' else (0, 0, 0, 0)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+
+# -----------------------------------------------------------------------------
+# Icon Button - Compact circular
+# -----------------------------------------------------------------------------
+<IconButton@Button>:
+    size_hint: None, None
+    size: "40dp", "40dp"
+    color: 0.91, 0.918, 0.929, 1
+    canvas.before:
+        Color:
+            rgba: (0.118, 0.227, 0.373, 1) if self.state == 'down' else (0.071, 0.129, 0.212, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [20]
+
+# -----------------------------------------------------------------------------
+# Text Input - Clean dark style
+# -----------------------------------------------------------------------------
+<TextInput>:
+    background_normal: ''
+    background_active: ''
+    background_color: 0, 0, 0, 0
+    foreground_color: 0.91, 0.918, 0.929, 1
+    cursor_color: 0, 0.831, 1, 1
+    cursor_width: "2dp"
+    hint_text_color: 0.604, 0.627, 0.651, 1
+    font_size: "14sp"
+    padding: [12, 12, 12, 12]
+    multiline: False
+    size_hint_y: None
+    height: "44dp"
+    canvas.before:
+        # Background
+        Color:
+            rgba: 0.071, 0.129, 0.212, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+        # Border
+        Color:
+            rgba: (0, 0.831, 1, 0.8) if self.focus else (0.118, 0.227, 0.373, 1)
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, 6
+            width: 1.5 if self.focus else 1
+
+# -----------------------------------------------------------------------------
+# Spinner (Dropdown)
+# -----------------------------------------------------------------------------
+<Spinner>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: 0.91, 0.918, 0.929, 1
+    font_size: "14sp"
+    size_hint_y: None
+    height: "44dp"
+    canvas.before:
+        # Background
+        Color:
+            rgba: (0.118, 0.227, 0.373, 1) if self.state == 'down' else (0.071, 0.129, 0.212, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [6]
+        # Border
+        Color:
+            rgba: 0.118, 0.227, 0.373, 1
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, 6
+            width: 1
+
+<SpinnerOption>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: 0.91, 0.918, 0.929, 1
+    font_size: "14sp"
+    size_hint_y: None
+    height: "40dp"
+    canvas.before:
+        Color:
+            rgba: (0, 0.831, 1, 0.15) if self.state == 'down' else (0.071, 0.129, 0.212, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+# -----------------------------------------------------------------------------
+# Switch Toggle
+# -----------------------------------------------------------------------------
+<Switch>:
+    canvas.before:
+        # Track
+        Color:
+            rgba: (0.102, 0.451, 0.91, 1) if self.active else (0.118, 0.227, 0.373, 1)
+        RoundedRectangle:
+            pos: self.center_x - 22, self.center_y - 11
+            size: 44, 22
+            radius: [11]
+        # Thumb
+        Color:
+            rgba: 1, 1, 1, 1
+        Ellipse:
+            pos: (self.center_x + 5, self.center_y - 8) if self.active else (self.center_x - 19, self.center_y - 8)
+            size: 16, 16
+
+# -----------------------------------------------------------------------------
+# Checkbox
+# -----------------------------------------------------------------------------
+<CheckBox>:
+    color: 0, 0.831, 1, 1
+    canvas.before:
+        # Background
+        Color:
+            rgba: (0.102, 0.451, 0.91, 1) if self.active else (0.071, 0.129, 0.212, 1)
+        RoundedRectangle:
+            pos: self.center_x - 10, self.center_y - 10
+            size: 20, 20
+            radius: [4]
+        # Border
+        Color:
+            rgba: (0.102, 0.451, 0.91, 1) if self.active else (0.118, 0.227, 0.373, 1)
+        Line:
+            rounded_rectangle: self.center_x - 10, self.center_y - 10, 20, 20, 4
+            width: 1.5
+        # Checkmark
+        Color:
+            rgba: (1, 1, 1, 1) if self.active else (0, 0, 0, 0)
+        Line:
+            points: [self.center_x - 5, self.center_y, self.center_x - 2, self.center_y - 4, self.center_x + 6, self.center_y + 5]
+            width: 2
+            cap: 'round'
+            joint: 'round'
+
+# -----------------------------------------------------------------------------
+# ScrollView
+# -----------------------------------------------------------------------------
+<ScrollView>:
+    bar_color: 0.102, 0.451, 0.91, 0.6
+    bar_inactive_color: 0.118, 0.227, 0.373, 0.4
+    bar_width: "6dp"
+    bar_margin: "2dp"
+    scroll_type: ['bars', 'content']
+    effect_cls: 'ScrollEffect'
+
+# -----------------------------------------------------------------------------
+# Popup Modal
+# -----------------------------------------------------------------------------
+<Popup>:
+    separator_color: 0.118, 0.227, 0.373, 1
+    title_color: 0.91, 0.918, 0.929, 1
+    title_size: "18sp"
+    background: ''
+    canvas.before:
+        # Overlay
+        Color:
+            rgba: 0, 0, 0, 0.6
+        Rectangle:
+            pos: 0, 0
+            size: self.width * 2, self.height * 2
+        # Modal background
+        Color:
+            rgba: 0.071, 0.129, 0.212, 0.98
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [8]
+
+# -----------------------------------------------------------------------------
+# Card Container
+# -----------------------------------------------------------------------------
+<Card@BoxLayout>:
+    orientation: 'vertical'
+    padding: "16dp"
+    spacing: "8dp"
+    size_hint_y: None
+    canvas.before:
+        Color:
+            rgba: 0.071, 0.129, 0.212, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [8]
+        Color:
+            rgba: 0.118, 0.227, 0.373, 1
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, 8
+            width: 1
+
+# -----------------------------------------------------------------------------
+# Heading Labels
+# -----------------------------------------------------------------------------
+<H1@Label>:
+    font_size: "28sp"
+    bold: True
+    color: 1, 1, 1, 1
+    size_hint_y: None
+    height: self.texture_size[1] + 16
+
+<H2@Label>:
+    font_size: "22sp"
+    bold: True
+    color: 1, 1, 1, 1
+    size_hint_y: None
+    height: self.texture_size[1] + 12
+
+<H3@Label>:
+    font_size: "18sp"
+    bold: True
+    color: 0.91, 0.918, 0.929, 1
+    size_hint_y: None
+    height: self.texture_size[1] + 8
+
+# -----------------------------------------------------------------------------
+# Muted/Secondary Text
+# -----------------------------------------------------------------------------
+<MutedLabel@Label>:
+    color: 0.604, 0.627, 0.651, 1
+    font_size: "13sp"
+
+# -----------------------------------------------------------------------------
+# Badge/Chip
+# -----------------------------------------------------------------------------
+<Badge@Label>:
+    size_hint: None, None
+    size: self.texture_size[0] + 16, 24
+    font_size: "11sp"
+    bold: True
+    canvas.before:
+        Color:
+            rgba: 0.102, 0.451, 0.91, 0.2
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [12]

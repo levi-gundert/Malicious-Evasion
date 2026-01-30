@@ -1,0 +1,906 @@
+{
+  "version": "0.3.1",
+  "build": "da3e3b7",
+  "sample": {
+    "id": "260128-w68cvaczs2",
+    "score": 7,
+    "submitted": "2026-01-28T18:33:08Z",
+    "target": "mparivahan.apk",
+    "size": 7737662,
+    "md5": "542b659d64ad53f1de1ecfaf1eddddc3",
+    "sha1": "fe5eaf6734dcb360c8992ca4028255206b49cfe9",
+    "sha256": "58aabfc0bf8f04f262899888d94b51d195fb0f0ba58122a83d6dd8278b07d9b6",
+    "sha512": "75b2c3498d34e757890169d41560db0f848a9e2853145c5796f9a599d0debdbad0bf0834f84df9462f0cd8aa9af7c36725d64fe0f5f2913c01f4ca06a864972e",
+    "ssdeep": "98304:u7i0r9sYJbVsvHeJP3HebEFh3kVzDtyvD518JnHjyCv5bUoN/Bmdb3zSFHqct1fT:iJbQlbd14b5y9+CvOoxuWFHq41hCg",
+    "static_tags": [
+      "android",
+      "arch:arm64",
+      "arch:x64",
+      "arch:x86",
+      "arch:arm"
+    ]
+  },
+  "task": {
+    "target": "mparivahan.apk",
+    "size": 7737662,
+    "md5": "542b659d64ad53f1de1ecfaf1eddddc3",
+    "sha1": "fe5eaf6734dcb360c8992ca4028255206b49cfe9",
+    "sha256": "58aabfc0bf8f04f262899888d94b51d195fb0f0ba58122a83d6dd8278b07d9b6",
+    "sha512": "75b2c3498d34e757890169d41560db0f848a9e2853145c5796f9a599d0debdbad0bf0834f84df9462f0cd8aa9af7c36725d64fe0f5f2913c01f4ca06a864972e",
+    "ssdeep": "98304:u7i0r9sYJbVsvHeJP3HebEFh3kVzDtyvD518JnHjyCv5bUoN/Bmdb3zSFHqct1fT:iJbQlbd14b5y9+CvOoxuWFHq41hCg",
+    "static_tags": [
+      "android",
+      "arch:arm64",
+      "arch:x64",
+      "arch:x86",
+      "arch:arm"
+    ]
+  },
+  "analysis": {
+    "score": 7,
+    "tags": [
+      "evasion",
+      "impact"
+    ],
+    "ttp": [
+      "T1407",
+      "T1471",
+      "T1102"
+    ],
+    "features": [
+      "analog",
+      "overview"
+    ],
+    "submitted": "2026-01-28T18:33:08Z",
+    "reported": "2026-01-28T18:34:16Z",
+    "max_time_network": 48199,
+    "max_time_kernel": 58817,
+    "backend": "sbx4m104",
+    "resource": "android-x64-arm64-20251027-en",
+    "resource_tags": [
+      "arch:arm",
+      "arch:arm64",
+      "arch:x64",
+      "arch:x86",
+      "image:android-x64-arm64-20251027-en",
+      "locale:en-us",
+      "os:android-11-x64",
+      "system"
+    ],
+    "geolocation_tags": [
+      "ca",
+      "canada",
+      "na",
+      "north-america",
+      "toronto"
+    ],
+    "platform": "android-11_x64"
+  },
+  "processes": [
+    {
+      "procid": 1,
+      "pid": 4738,
+      "ppid": 286,
+      "cmd": "com.zhiliaoapp.musically",
+      "orig": false,
+      "started": 1081
+    }
+  ],
+  "signatures": [
+    {
+      "name": "Loads dropped Dex/Jar",
+      "score": 7,
+      "ttp": [
+        "T1407"
+      ],
+      "tags": [
+        "evasion"
+      ],
+      "indicators": [
+        {
+          "ioc": "/data/user/0/com.zhiliaoapp.musically/app_mph_dex/classes.dex",
+          "pid": 4738,
+          "procid": 1
+        },
+        {
+          "ioc": "/data/user/0/com.zhiliaoapp.musically/app_mph_dex/classes.dex",
+          "pid": 4738,
+          "procid": 1
+        },
+        {
+          "ioc": "/data/user/0/com.zhiliaoapp.musically/app_mph_dex/classes.dex",
+          "pid": 4738,
+          "procid": 1
+        },
+        {
+          "ioc": "/data/user/0/com.zhiliaoapp.musically/app_mph_dex/classes.dex",
+          "pid": 4738,
+          "procid": 1
+        }
+      ],
+      "desc": "Runs executable file dropped to the device during analysis."
+    },
+    {
+      "label": "susp_dom_as_c2",
+      "name": "Contacts third-party web service commonly abused for C2",
+      "score": 6,
+      "ttp": [
+        "T1102"
+      ],
+      "indicators": [
+        {
+          "ioc": "pastebin.com",
+          "flow": 29
+        },
+        {
+          "ioc": "pastebin.com",
+          "flow": 30
+        }
+      ],
+      "desc": "Legitimate web (hosting) services can be abused by malware authors to host malware or C2s."
+    },
+    {
+      "label": "crypto_api",
+      "name": "Uses Crypto APIs (Might try to encrypt user data)",
+      "score": 4,
+      "ttp": [
+        "T1471"
+      ],
+      "tags": [
+        "impact"
+      ],
+      "indicators": [
+        {
+          "ioc": "javax.crypto.Cipher.doFinal",
+          "description": "Framework API call",
+          "procid": 1
+        }
+      ]
+    }
+  ],
+  "tags": null,
+  "network": {
+    "flows": [
+      {
+        "id": 1,
+        "src": "10.127.1.52:5353",
+        "dst": "224.0.0.251:5353",
+        "proto": "udp",
+        "first_seen": 1687,
+        "last_seen": 33568,
+        "rx_bytes": 0,
+        "rx_packets": 0,
+        "tx_bytes": 2916,
+        "tx_packets": 9
+      },
+      {
+        "id": 9,
+        "src": "10.127.1.52:34756",
+        "dst": "172.217.168.202:443",
+        "proto": "tcp",
+        "first_seen": 3133,
+        "last_seen": 3341,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 1256,
+        "tx_packets": 1,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 10,
+        "src": "10.127.1.52:58629",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 3143,
+        "last_seen": 3261,
+        "rx_bytes": 287,
+        "rx_packets": 1,
+        "tx_bytes": 61,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "www.youtube.com"
+      },
+      {
+        "id": 15,
+        "src": "10.127.1.52:36488",
+        "dst": "142.250.139.91:443",
+        "proto": "udp",
+        "first_seen": 3261,
+        "last_seen": 3261,
+        "rx_bytes": 0,
+        "rx_packets": 0,
+        "tx_bytes": 1378,
+        "tx_packets": 1,
+        "protocols": [
+          "https"
+        ],
+        "domain": "www.youtube.com"
+      },
+      {
+        "id": 16,
+        "src": "10.127.1.52:41112",
+        "dst": "142.250.139.91:443",
+        "proto": "tcp",
+        "first_seen": 3261,
+        "last_seen": 3859,
+        "rx_bytes": 8202,
+        "rx_packets": 12,
+        "tx_bytes": 1982,
+        "tx_packets": 15,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "www.youtube.com",
+        "tls_ja3": "f582cd302bf5a0868815f5d37627e5fd",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "www.youtube.com"
+      },
+      {
+        "id": 19,
+        "src": "10.127.1.52:34778",
+        "dst": "172.217.168.202:443",
+        "proto": "tcp",
+        "first_seen": 3374,
+        "last_seen": 3575,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 532,
+        "tx_packets": 1,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 21,
+        "src": "10.127.1.52:53078",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 3675,
+        "last_seen": 3782,
+        "rx_bytes": 189,
+        "rx_packets": 1,
+        "tx_bytes": 69,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "android.apis.google.com"
+      },
+      {
+        "id": 22,
+        "src": "10.127.1.52:23511",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 3675,
+        "last_seen": 3783,
+        "rx_bytes": 189,
+        "rx_packets": 1,
+        "tx_bytes": 69,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "android.apis.google.com"
+      },
+      {
+        "id": 23,
+        "src": "10.127.1.52:54288",
+        "dst": "142.250.179.206:443",
+        "proto": "tcp",
+        "first_seen": 3679,
+        "last_seen": 3880,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 2856,
+        "tx_packets": 2,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 25,
+        "src": "10.127.1.52:56674",
+        "dst": "142.250.139.100:443",
+        "proto": "tcp",
+        "first_seen": 3783,
+        "last_seen": 4437,
+        "rx_bytes": 5967,
+        "rx_packets": 11,
+        "tx_bytes": 4073,
+        "tx_packets": 13,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 26,
+        "src": "10.127.1.52:39946",
+        "dst": "142.250.139.139:443",
+        "proto": "tcp",
+        "first_seen": 3783,
+        "last_seen": 34734,
+        "rx_bytes": 6854,
+        "rx_packets": 14,
+        "tx_bytes": 2881,
+        "tx_packets": 15,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 27,
+        "src": "10.127.1.52:56678",
+        "dst": "142.250.139.100:443",
+        "proto": "tcp",
+        "first_seen": 3876,
+        "last_seen": 4571,
+        "rx_bytes": 6035,
+        "rx_packets": 11,
+        "tx_bytes": 2605,
+        "tx_packets": 12,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 28,
+        "src": "10.127.1.52:56680",
+        "dst": "142.250.139.100:443",
+        "proto": "tcp",
+        "first_seen": 3881,
+        "last_seen": 4572,
+        "rx_bytes": 5820,
+        "rx_packets": 11,
+        "tx_bytes": 2641,
+        "tx_packets": 13,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 29,
+        "src": "10.127.1.52:51455",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 6039,
+        "last_seen": 6163,
+        "rx_bytes": 90,
+        "rx_packets": 1,
+        "tx_bytes": 58,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "pastebin.com"
+      },
+      {
+        "id": 30,
+        "src": "10.127.1.52:46024",
+        "dst": "172.66.171.73:443",
+        "proto": "tcp",
+        "first_seen": 6165,
+        "last_seen": 7652,
+        "rx_bytes": 5408,
+        "rx_packets": 13,
+        "tx_bytes": 1876,
+        "tx_packets": 15,
+        "protocols": [
+          "tls",
+          "http"
+        ],
+        "domain": "pastebin.com",
+        "tls_ja3": "6067d41895f51359e2ffa2b6a43d2cd6",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "pastebin.com"
+      }
+    ],
+    "requests": [
+      {
+        "flow": 10,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "www.youtube.com"
+          ],
+          "questions": [
+            {
+              "name": "www.youtube.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 10,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "www.youtube.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com"
+          ],
+          "ip": [
+            "142.250.139.91",
+            "142.250.139.136",
+            "192.178.192.91",
+            "192.178.192.136",
+            "142.250.139.93",
+            "142.250.137.136",
+            "142.250.137.190",
+            "142.250.137.93",
+            "192.178.192.93",
+            "142.250.137.91",
+            "192.178.192.190",
+            "142.250.139.190"
+          ],
+          "answers": [
+            {
+              "name": "www.youtube.com",
+              "type": "IN CNAME",
+              "value": "youtube-ui.l.google.com"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "192.178.192.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "192.178.192.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.137.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.137.190"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.137.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "192.178.192.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.137.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "192.178.192.190"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.190"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 21,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "android.apis.google.com"
+          ],
+          "questions": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 21,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "android.apis.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com"
+          ],
+          "ip": [
+            "142.250.139.139",
+            "142.250.139.138",
+            "142.250.139.113",
+            "142.250.139.101",
+            "142.250.139.102",
+            "142.250.139.100"
+          ],
+          "answers": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN CNAME",
+              "value": "clients.l.google.com"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.139"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.138"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.113"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.101"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.102"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.100"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 22,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "android.apis.google.com"
+          ],
+          "questions": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 22,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "android.apis.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com",
+            "clients.l.google.com"
+          ],
+          "ip": [
+            "142.250.139.100",
+            "142.250.139.102",
+            "142.250.139.101",
+            "142.250.139.139",
+            "142.250.139.138",
+            "142.250.139.113"
+          ],
+          "answers": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN CNAME",
+              "value": "clients.l.google.com"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.100"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.102"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.101"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.139"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.138"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.139.113"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 29,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "pastebin.com"
+          ],
+          "questions": [
+            {
+              "name": "pastebin.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 29,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "pastebin.com",
+            "pastebin.com"
+          ],
+          "ip": [
+            "172.66.171.73",
+            "104.20.29.150"
+          ],
+          "answers": [
+            {
+              "name": "pastebin.com",
+              "type": "IN A",
+              "value": "172.66.171.73"
+            },
+            {
+              "name": "pastebin.com",
+              "type": "IN A",
+              "value": "104.20.29.150"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 30,
+        "index": 1,
+        "http_request": {
+          "method": "GET",
+          "url": "https://pastebin.com/raw/X0ZZAxgz",
+          "request": "GET /raw/X0ZZAxgz HTTP/1.1",
+          "headers": [
+            "User-Agent: Mozilla/5.0",
+            "Cache-Control: no-cache",
+            "Host: pastebin.com",
+            "Connection: Keep-Alive",
+            "Accept-Encoding: gzip"
+          ]
+        }
+      },
+      {
+        "flow": 30,
+        "index": 1,
+        "http_response": {
+          "status": "200",
+          "response": "HTTP/1.1 200 OK",
+          "headers": [
+            "Date: Wed, 28 Jan 2026 18:33:19 GMT",
+            "Content-Type: text/plain; charset=utf-8",
+            "Transfer-Encoding: chunked",
+            "Connection: keep-alive",
+            "Server: cloudflare",
+            "x-frame-options: DENY",
+            "x-content-type-options: nosniff",
+            "x-xss-protection: 1;mode=block",
+            "Cache-Control: public, max-age=14400",
+            "cf-cache-status: MISS",
+            "last-modified: Wed, 28 Jan 2026 18:33:19 GMT",
+            "Vary: accept-encoding",
+            "Content-Encoding: gzip",
+            "CF-RAY: 9c5293d869d5ebb8-YYZ"
+          ]
+        }
+      },
+      {
+        "flow": 30,
+        "index": 2,
+        "http_request": {
+          "method": "GET",
+          "url": "https://pastebin.com/raw/w3ExwBwv",
+          "request": "GET /raw/w3ExwBwv HTTP/1.1",
+          "headers": [
+            "User-Agent: Mozilla/5.0",
+            "Cache-Control: no-cache",
+            "Host: pastebin.com",
+            "Connection: Keep-Alive",
+            "Accept-Encoding: gzip"
+          ]
+        }
+      },
+      {
+        "flow": 30,
+        "index": 2,
+        "http_response": {
+          "status": "200",
+          "response": "HTTP/1.1 200 OK",
+          "headers": [
+            "Date: Wed, 28 Jan 2026 18:33:20 GMT",
+            "Content-Type: text/plain; charset=utf-8",
+            "Transfer-Encoding: chunked",
+            "Connection: keep-alive",
+            "Server: cloudflare",
+            "x-frame-options: DENY",
+            "x-content-type-options: nosniff",
+            "x-xss-protection: 1;mode=block",
+            "Cache-Control: public, max-age=14400",
+            "cf-cache-status: MISS",
+            "last-modified: Wed, 28 Jan 2026 18:33:20 GMT",
+            "Vary: accept-encoding",
+            "Content-Encoding: gzip",
+            "CF-RAY: 9c5293dbfabdebb8-YYZ"
+          ]
+        }
+      }
+    ],
+    "ips": {
+      "1.1.1.1": {
+        "cc": "AU",
+        "asn": "AS13335"
+      },
+      "142.250.137.95": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.139.100": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.139.139": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.139.156": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.139.91": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.139.95": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "142.250.179.206": {
+        "cc": "NL",
+        "asn": "AS15169"
+      },
+      "172.217.168.202": {
+        "cc": "NL",
+        "asn": "AS15169"
+      },
+      "172.66.171.73": {
+        "cc": "US",
+        "asn": "AS13335"
+      },
+      "192.178.192.95": {
+        "cc": "CA",
+        "asn": "AS15169"
+      },
+      "216.239.34.223": {
+        "cc": "US",
+        "asn": "AS15169"
+      }
+    }
+  },
+  "dumped": [
+    {
+      "at": 1358,
+      "pid": 4738,
+      "procid": 1,
+      "path": "/data/user/0/com.zhiliaoapp.musically/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫",
+      "name": "files/fstream-1.dat",
+      "kind": "martian",
+      "md5": "c986ef2498899c2cc309664f4da1b6a8",
+      "sha1": "d481815c39d9fb17f99130520cbe91f2b23eec5e",
+      "sha256": "889204a5e2aff3fcdaca28102b2b58c460926519af9362e595342d295157b028",
+      "sha512": "d3bb1658619bd54f69f557dfa247d039b9cfacc6d988663b052b2993f717bd8ffb228f24d92b73f0d1238aa8b3ef6e748d21e3e838d67ee36008759de4f0b325",
+      "ssdeep": "98304:w/kxEDTjDo5c6hjhAjZnYmz2ETof0DmVvEniP4VFEnYyxFojyOvHeJP3He:4kx4TjDWrj6jOmz2ETo8DqvEo4VFEUjr",
+      "tlsh": "T1BF3623A2BF8E572EE1F773748051C043660B742D56BE7E9EA99024AC0BF78142BCF594",
+      "size": 5077361
+    },
+    {
+      "at": 1388,
+      "pid": 4738,
+      "procid": 1,
+      "path": "/data/user/0/com.zhiliaoapp.musically/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫/ۦۖ۫.",
+      "name": "files/fstream-2.dat",
+      "kind": "martian",
+      "md5": "8829b17ca0bbcf5a8f7970c2d049220c",
+      "sha1": "4b16a81f1d3a0d46e707bc1f969b9e0003536fb3",
+      "sha256": "ec31d0f77f8e869c2423aa55a4fe8e017ee79ba6b5e1693bbff7b64bbd8237a8",
+      "sha512": "f4b1f43606e08c24e8dbf389849fdeef4f344f4538964dba6dcaebbdc330faa225b07d00a6f1a566b6e1f73952775cb80bbd44f076d57124054ad277729ad468",
+      "size": 8
+    },
+    {
+      "at": 1464,
+      "pid": 4738,
+      "procid": 1,
+      "path": "/data/user/0/com.zhiliaoapp.musically/app_mph_dex/classes.dex",
+      "name": "files/fstream-3.dat",
+      "kind": "martian",
+      "md5": "41711ea411bb60ff4d1f6162c847636b",
+      "sha1": "dbc9f50d215963ca7235503347e9c93dd0034638",
+      "sha256": "5f4a978f4a04f2cc1dad804d2d523c9d2a20ee5a0582b5dd59c9d9e382153737",
+      "sha512": "ebb85b6c744d33055e803e9030e7339ff53e9ddd4f31a00f17509a42e2377b86c6ce4390f57ef1b5fdb90de8434153cadd1d1f45012e22fccfd1683cbedd224d",
+      "ssdeep": "98304:EQ0/ei5O3N0vot3jb56qiHXo+1CTogq5MoH2Nl976X2kHcLj+vt8gV/sTVM5DV:Ej6gVUTyV",
+      "tlsh": "T109162A265617FA63C6AEF3B014961B64FF309D61B2439E770A0F9531BC531AE2AD40CE",
+      "size": 4330868
+    }
+  ]
+}

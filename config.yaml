@@ -1,0 +1,49 @@
+# === TRIAGE API ===
+triage:
+  api_key: "${TRIAGE_API_KEY}"
+  base_url: "https://tria.ge/api/v0"
+  rate_limit:
+    requests_per_minute: 60
+    retry_on_429: true
+    max_retries: 5
+
+# === EXTRACTION PARAMETERS ===
+extraction:
+  lookback_days: 7
+  min_score: 7
+  os_targets:
+    - android
+    - windows
+    - linux
+    - macos
+  max_samples_per_os: 500
+
+# === FILTERING ===
+filtering:
+  min_sample_count: 2
+  min_confidence: 0.3
+  exclude_patterns:
+    - regex: "C:\\\\Users\\\\[^\\\\]+\\\\AppData"
+    - contains: "temp"
+
+# === OUTPUT ===
+output:
+  directory: "./output"
+  formats:
+    - json
+    - yaml
+  split_by_os: true
+  generate_deception_configs: true
+  generate_change_report: true
+
+# === CACHING ===
+cache:
+  enabled: true
+  path: "./cache/triage_cache.db"
+  max_size_mb: 500
+
+# === LOGGING ===
+logging:
+  level: INFO
+  file: "./logs/extractor.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

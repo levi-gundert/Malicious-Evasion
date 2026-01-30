@@ -1,0 +1,11 @@
+# Outputs
+output/
+cache/
+logs/
+
+# Virtualenv
+.venv/
+
+# Python
+__pycache__/
+*.pyc

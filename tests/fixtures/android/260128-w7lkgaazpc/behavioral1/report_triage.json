@@ -1,0 +1,711 @@
+{
+  "version": "0.3.1",
+  "build": "da3e3b7",
+  "sample": {
+    "id": "260128-w7lkgaazpc",
+    "score": 6,
+    "submitted": "2026-01-28T18:33:48Z",
+    "target": "foto.apk",
+    "size": 2416704,
+    "md5": "2c3a161ad69513fca35c33bc073e1b89",
+    "sha1": "7b7475a227aadad8ab88ec0b1e8f7e1a8aa3f04e",
+    "sha256": "754047d498be897448d2ee9d0694e7b1d14f8cb33f145a69ba419d4a367ba84a",
+    "sha512": "929c685059a4eb6d1b56a6070c4f38c351519f41dcc7577776cd5129536327c1359da6e70f3934f221567ded5c21c8a0dd047836f35c3d42041cb2fe85a0309e",
+    "ssdeep": "49152:8kxHpwbqjsNGStJPbN+WAXNct5c1mMR95jMtWabQMz5unufz:PIG4p0NI5c1Z5gNFgcz",
+    "static_tags": [
+      "android",
+      "arch:x64",
+      "arch:arm",
+      "arch:arm64",
+      "arch:x86"
+    ]
+  },
+  "task": {
+    "target": "foto.apk",
+    "size": 2416704,
+    "md5": "2c3a161ad69513fca35c33bc073e1b89",
+    "sha1": "7b7475a227aadad8ab88ec0b1e8f7e1a8aa3f04e",
+    "sha256": "754047d498be897448d2ee9d0694e7b1d14f8cb33f145a69ba419d4a367ba84a",
+    "sha512": "929c685059a4eb6d1b56a6070c4f38c351519f41dcc7577776cd5129536327c1359da6e70f3934f221567ded5c21c8a0dd047836f35c3d42041cb2fe85a0309e",
+    "ssdeep": "49152:8kxHpwbqjsNGStJPbN+WAXNct5c1mMR95jMtWabQMz5unufz:PIG4p0NI5c1Z5gNFgcz",
+    "static_tags": [
+      "android",
+      "arch:x64",
+      "arch:arm",
+      "arch:arm64",
+      "arch:x86"
+    ]
+  },
+  "analysis": {
+    "score": 6,
+    "tags": [
+      "defense_evasion"
+    ],
+    "ttp": [
+      "T1632.001"
+    ],
+    "features": [
+      "analog",
+      "overview"
+    ],
+    "submitted": "2026-01-28T18:33:48Z",
+    "reported": "2026-01-28T18:34:57Z",
+    "max_time_network": 47431,
+    "max_time_kernel": 6163,
+    "backend": "sbx4m101",
+    "resource": "android-x64-arm64-20260115-en",
+    "resource_tags": [
+      "arch:arm",
+      "arch:arm64",
+      "arch:x64",
+      "arch:x86",
+      "image:android-x64-arm64-20260115-en",
+      "locale:en-us",
+      "os:android-11-x64",
+      "system"
+    ],
+    "geolocation_tags": [
+      "na",
+      "new-jersey",
+      "north-america",
+      "united-states",
+      "us",
+      "usa"
+    ],
+    "platform": "android-11_x64"
+  },
+  "processes": [
+    {
+      "procid": 1,
+      "pid": 4751,
+      "ppid": 283,
+      "cmd": "com.platform.cxnzj",
+      "orig": false,
+      "started": 943
+    }
+  ],
+  "signatures": [
+    {
+      "label": "check_applications_installation",
+      "name": "Checks the application is allowed to request package installs through the package installer",
+      "score": 6,
+      "ttp": [
+        "T1632.001"
+      ],
+      "tags": [
+        "defense_evasion"
+      ],
+      "indicators": [
+        {
+          "ioc": "android.content.pm.IPackageManager.canRequestPackageInstalls",
+          "description": "Framework service call",
+          "procid": 1
+        }
+      ],
+      "desc": "Checks the application is allowed to install additional applications (Might try to install applications from unknown sources)."
+    }
+  ],
+  "tags": null,
+  "network": {
+    "flows": [
+      {
+        "id": 1,
+        "src": "10.127.0.210:5353",
+        "dst": "224.0.0.251:5353",
+        "proto": "udp",
+        "first_seen": 1690,
+        "last_seen": 33204,
+        "rx_bytes": 0,
+        "rx_packets": 0,
+        "tx_bytes": 2985,
+        "tx_packets": 10
+      },
+      {
+        "id": 7,
+        "src": "10.127.0.210:7728",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 2878,
+        "last_seen": 2974,
+        "rx_bytes": 351,
+        "rx_packets": 1,
+        "tx_bytes": 61,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "www.youtube.com"
+      },
+      {
+        "id": 9,
+        "src": "10.127.0.210:36330",
+        "dst": "142.250.151.95:443",
+        "proto": "tcp",
+        "first_seen": 2887,
+        "last_seen": 3050,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 1264,
+        "tx_packets": 1,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 11,
+        "src": "10.127.0.210:52182",
+        "dst": "142.251.167.91:443",
+        "proto": "tcp",
+        "first_seen": 2975,
+        "last_seen": 3440,
+        "rx_bytes": 8412,
+        "rx_packets": 15,
+        "tx_bytes": 2124,
+        "tx_packets": 18,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "www.youtube.com",
+        "tls_ja3": "1e602ec23afe75d02d05404a056fb941",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "www.youtube.com"
+      },
+      {
+        "id": 14,
+        "src": "10.127.0.210:36356",
+        "dst": "142.250.151.95:443",
+        "proto": "tcp",
+        "first_seen": 3108,
+        "last_seen": 3271,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 532,
+        "tx_packets": 1,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 16,
+        "src": "10.127.0.210:44880",
+        "dst": "142.250.151.138:443",
+        "proto": "tcp",
+        "first_seen": 3226,
+        "last_seen": 3389,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 2850,
+        "tx_packets": 2,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      },
+      {
+        "id": 17,
+        "src": "10.127.0.210:12819",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 3227,
+        "last_seen": 3321,
+        "rx_bytes": 109,
+        "rx_packets": 1,
+        "tx_bytes": 69,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "android.apis.google.com"
+      },
+      {
+        "id": 19,
+        "src": "10.127.0.210:14024",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 3277,
+        "last_seen": 3374,
+        "rx_bytes": 109,
+        "rx_packets": 1,
+        "tx_bytes": 69,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "android.apis.google.com"
+      },
+      {
+        "id": 20,
+        "src": "10.127.0.210:38366",
+        "dst": "142.251.45.174:443",
+        "proto": "tcp",
+        "first_seen": 3322,
+        "last_seen": 40600,
+        "rx_bytes": 6931,
+        "rx_packets": 14,
+        "tx_bytes": 5043,
+        "tx_packets": 15,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 22,
+        "src": "10.127.0.210:37640",
+        "dst": "142.250.80.110:443",
+        "proto": "tcp",
+        "first_seen": 3374,
+        "last_seen": 3799,
+        "rx_bytes": 5807,
+        "rx_packets": 9,
+        "tx_bytes": 1753,
+        "tx_packets": 10,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 23,
+        "src": "10.127.0.210:37642",
+        "dst": "142.250.80.110:443",
+        "proto": "tcp",
+        "first_seen": 3390,
+        "last_seen": 4126,
+        "rx_bytes": 5985,
+        "rx_packets": 10,
+        "tx_bytes": 3907,
+        "tx_packets": 11,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 24,
+        "src": "10.127.0.210:37644",
+        "dst": "142.250.80.110:443",
+        "proto": "tcp",
+        "first_seen": 3468,
+        "last_seen": 4424,
+        "rx_bytes": 6031,
+        "rx_packets": 11,
+        "tx_bytes": 2605,
+        "tx_packets": 12,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "android.apis.google.com",
+        "tls_ja3": "8f35687f7cd9ba7a693ccc31d712f6c0",
+        "tls_ja3s": "d75f9129bb5d05492a65ff78e081bcb2",
+        "tls_sni": "android.apis.google.com"
+      },
+      {
+        "id": 28,
+        "src": "10.127.0.210:42139",
+        "dst": "1.1.1.1:53",
+        "proto": "udp",
+        "first_seen": 7654,
+        "last_seen": 7749,
+        "rx_bytes": 86,
+        "rx_packets": 1,
+        "tx_bytes": 70,
+        "tx_packets": 1,
+        "protocols": [
+          "dns"
+        ],
+        "domain": "ssl.google-analytics.com"
+      },
+      {
+        "id": 29,
+        "src": "10.127.0.210:46770",
+        "dst": "142.250.190.232:443",
+        "proto": "tcp",
+        "first_seen": 7749,
+        "last_seen": 8158,
+        "rx_bytes": 6266,
+        "rx_packets": 9,
+        "tx_bytes": 1318,
+        "tx_packets": 9,
+        "protocols": [
+          "tls"
+        ],
+        "domain": "ssl.google-analytics.com",
+        "tls_ja3": "69659b6dfbeaa53c063d2002cfecab13",
+        "tls_ja3s": "cd5a8d2e276eabf0839bf1a25acc479e",
+        "tls_sni": "ssl.google-analytics.com"
+      },
+      {
+        "id": 30,
+        "src": "10.127.0.210:36332",
+        "dst": "142.250.151.95:443",
+        "proto": "tcp",
+        "first_seen": 40179,
+        "last_seen": 40344,
+        "rx_bytes": 40,
+        "rx_packets": 1,
+        "tx_bytes": 1264,
+        "tx_packets": 1,
+        "protocols": [
+          "tls",
+          "https"
+        ]
+      }
+    ],
+    "requests": [
+      {
+        "flow": 7,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "www.youtube.com"
+          ],
+          "questions": [
+            {
+              "name": "www.youtube.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 7,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "www.youtube.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com",
+            "youtube-ui.l.google.com"
+          ],
+          "ip": [
+            "142.251.167.91",
+            "142.251.16.93",
+            "172.253.139.91",
+            "142.250.31.91",
+            "142.251.167.136",
+            "142.251.111.91",
+            "142.251.111.136",
+            "142.251.111.93",
+            "172.253.139.190",
+            "142.251.167.190",
+            "142.251.167.93",
+            "142.250.31.93",
+            "142.251.111.190",
+            "172.253.139.93",
+            "172.253.139.136",
+            "142.250.31.136"
+          ],
+          "answers": [
+            {
+              "name": "www.youtube.com",
+              "type": "IN CNAME",
+              "value": "youtube-ui.l.google.com"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.167.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.16.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "172.253.139.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.31.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.167.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.111.91"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.111.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.111.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "172.253.139.190"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.167.190"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.167.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.31.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.251.111.190"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "172.253.139.93"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "172.253.139.136"
+            },
+            {
+              "name": "youtube-ui.l.google.com",
+              "type": "IN A",
+              "value": "142.250.31.136"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 17,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "android.apis.google.com"
+          ],
+          "questions": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 17,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "android.apis.google.com",
+            "clients.l.google.com"
+          ],
+          "ip": [
+            "142.251.45.174"
+          ],
+          "answers": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN CNAME",
+              "value": "clients.l.google.com"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.251.45.174"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 19,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "android.apis.google.com"
+          ],
+          "questions": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 19,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "android.apis.google.com",
+            "clients.l.google.com"
+          ],
+          "ip": [
+            "142.250.80.110"
+          ],
+          "answers": [
+            {
+              "name": "android.apis.google.com",
+              "type": "IN CNAME",
+              "value": "clients.l.google.com"
+            },
+            {
+              "name": "clients.l.google.com",
+              "type": "IN A",
+              "value": "142.250.80.110"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 28,
+        "index": 1,
+        "dns_request": {
+          "domains": [
+            "ssl.google-analytics.com"
+          ],
+          "questions": [
+            {
+              "name": "ssl.google-analytics.com",
+              "type": "IN A"
+            }
+          ]
+        }
+      },
+      {
+        "flow": 28,
+        "index": 1,
+        "dns_response": {
+          "domains": [
+            "ssl.google-analytics.com"
+          ],
+          "ip": [
+            "142.250.190.232"
+          ],
+          "answers": [
+            {
+              "name": "ssl.google-analytics.com",
+              "type": "IN A",
+              "value": "142.250.190.232"
+            }
+          ]
+        }
+      }
+    ],
+    "ips": {
+      "1.1.1.1": {
+        "cc": "AU",
+        "asn": "AS13335"
+      },
+      "142.250.151.138": {
+        "cc": "GB",
+        "asn": "AS15169"
+      },
+      "142.250.151.95": {
+        "cc": "GB",
+        "asn": "AS15169"
+      },
+      "142.250.190.232": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.250.190.234": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.250.191.2": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.250.80.110": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.251.167.91": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.251.210.42": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "142.251.45.174": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "192.178.218.95": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "216.239.36.223": {
+        "cc": "US",
+        "asn": "AS15169"
+      },
+      "216.239.38.223": {
+        "cc": "US",
+        "asn": "AS15169"
+      }
+    }
+  },
+  "dumped": [
+    {
+      "at": 6161,
+      "pid": 4751,
+      "procid": 1,
+      "path": "/data/misc/profiles/cur/0/com.platform.cxnzj/primary.prof",
+      "name": "files/fstream-1.dat",
+      "kind": "martian",
+      "md5": "b4ce946892b92986d77d35a466eeec53",
+      "sha1": "4d0c657d85dd1fea848224d48886d534237d2dcd",
+      "sha256": "f5b9cb63444d085077aa404ae122440fe1f747d4056f6a0fcafbf024d5f4d8b8",
+      "sha512": "e864142c2faefea78839bc4ca5371723f9260a883f909c5d1a1699daecc89f8c1c4de8aa20590e65cf5a2671339f0efbd9c7b152f00fd0af58754823e0d4d906",
+      "tlsh": "T14F516FF3EB3D94CE63C064F74A71CBAFEB5F05001592569C45FDA668E31B0A2F945224",
+      "size": 2748
+    },
+    {
+      "at": 6163,
+      "pid": 4751,
+      "procid": 1,
+      "path": "/data/data/com.platform.cxnzj/files/profileinstaller_profileWrittenFor_lastUpdateTime.dat",
+      "name": "files/fstream-2.dat",
+      "kind": "martian",
+      "md5": "8cbac91be9d00ce84dc8186489907610",
+      "sha1": "3dfffe5cafd7d9a2389b44cdd087a00c345cd9b7",
+      "sha256": "8c4f89eb96eb2b5f0a471ef4d0af8449a93b88a75e5208a182696a797c8f98fa",
+      "sha512": "ad18926f189c6ba7754c0a02c051d774b48a813cd7467da056a7b6dac94c76edbca9c78233b1bc59a1adb121e79bededeeb58fd7136212e69b019ed885f4fe94",
+      "size": 8
+    }
+  ]
+}

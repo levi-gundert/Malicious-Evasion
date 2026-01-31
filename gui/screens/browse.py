@@ -133,6 +133,10 @@ class ArtifactCard(MDCard):
         sample_id = artifact.get("source_sample_id", "")
         triage_url = artifact.get("triage_url", "")
         
+        # Store for click handling
+        self.triage_url = triage_url
+        self.sample_id = sample_id
+        
         # Prefer SHA1 for display, fallback to SHA256
         if source_sha1:
             hash_display = f"SHA1: {source_sha1[:16]}..."
@@ -141,21 +145,40 @@ class ArtifactCard(MDCard):
         else:
             hash_display = "Hash: Unknown"
         
-        # Build source text with Triage link
-        if sample_id:
-            source_text = f"[b]{hash_display}[/b]  |  Triage: [color=00D4FF][u]{sample_id}[/u][/color]"
-        else:
-            source_text = f"[b]{hash_display}[/b]"
+        # Source info row with clickable Triage link
+        source_row = MDBoxLayout(
+            orientation="horizontal",
+            size_hint_y=0.16,
+            spacing=dp(8),
+        )
         
-        source_label = MDLabel(
-            text=source_text,
+        # Hash label
+        hash_label = MDLabel(
+            text=f"[b]{hash_display}[/b]",
             markup=True,
             font_style="Caption",
             theme_text_color="Custom",
             text_color=(0.8, 0.8, 0.8, 1),
-            size_hint_y=0.16,
+            size_hint_x=0.5,
         )
-        content.add_widget(source_label)
+        source_row.add_widget(hash_label)
+        
+        # Triage link button (if available)
+        if sample_id and triage_url:
+            triage_btn = MDFlatButton(
+                text=f"Triage: {sample_id}",
+                size_hint=(None, 1),
+                width=dp(180),
+                theme_text_color="Custom",
+                text_color=(0, 0.831, 1, 1),
+                on_release=lambda x, url=triage_url: self._open_url(url),
+            )
+            source_row.add_widget(triage_btn)
+        else:
+            spacer = MDLabel(text="", size_hint_x=0.5)
+            source_row.add_widget(spacer)
+        
+        content.add_widget(source_row)
         
         # Row 5: Confidence and sample count
         confidence = artifact.get("confidence", 0)
@@ -201,31 +224,21 @@ class ArtifactCard(MDCard):
         badge.add_widget(badge_label)
         right_container.add_widget(badge)
         
-        # View in Triage button
-        triage_url = artifact.get("triage_url", "")
-        if triage_url:
-            view_btn = MDFlatButton(
-                text="View",
-                size_hint=(1, None),
-                height=dp(36),
-                theme_text_color="Custom",
-                text_color=(0, 0.831, 1, 1),
-                on_release=lambda x: self._open_triage(),
-            )
-            right_container.add_widget(view_btn)
-        
         # Spacer
         right_container.add_widget(MDBoxLayout())
         
-        self.triage_url = triage_url
         self.add_widget(right_container)
+    
+    def _open_url(self, url: str):
+        """Open a URL in the default browser."""
+        import webbrowser
+        if url:
+            logger.info(f"Opening URL: {url}")
+            webbrowser.open(url)
     
     def _open_triage(self):
         """Open the Triage URL in the default browser."""
-        import webbrowser
-        if self.triage_url:
-            logger.info(f"Opening Triage URL: {self.triage_url}")
-            webbrowser.open(self.triage_url)
+        self._open_url(self.triage_url)
 
 
 class BrowseScreen(MDScreen):
@@ -408,7 +421,13 @@ class BrowseScreen(MDScreen):
         main_layout.add_widget(self.results_label)
         
         # ===== ARTIFACTS LIST =====
-        scroll = ScrollView(size_hint=(1, 1))
+        scroll = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(12),  # Wider scrollbar for easier use
+            bar_color=(0.3, 0.5, 0.8, 0.9),  # Blue scrollbar
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),  # Faded when inactive
+            scroll_type=['bars', 'content'],  # Allow both bar and content scrolling
+        )
         self.artifacts_layout = MDBoxLayout(
             orientation="vertical",
             spacing=dp(10),

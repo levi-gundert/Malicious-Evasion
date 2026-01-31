@@ -104,7 +104,13 @@ class SettingsScreen(MDScreen):
         main_layout.add_widget(header)
         
         # ===== SCROLLABLE CONTENT =====
-        scroll = ScrollView(size_hint=(1, 1))
+        scroll = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(12),
+            bar_color=(0.3, 0.5, 0.8, 0.9),
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),
+            scroll_type=['bars', 'content'],
+        )
         content = MDBoxLayout(
             orientation="vertical",
             spacing=dp(20),
@@ -147,18 +153,20 @@ class SettingsScreen(MDScreen):
         
         # Show key toggle
         show_key_row = MDBoxLayout(spacing=dp(10), size_hint_y=None, height=dp(40))
+        show_key_row.add_widget(MDLabel(
+            text="Show API Key:",
+            font_style="Body2",
+            size_hint_x=0.4,
+            theme_text_color="Custom",
+            text_color=(0.91, 0.918, 0.929, 1),
+        ))
         self.show_key_switch = MDSwitch(
             size_hint=(None, None),
             size=(dp(48), dp(28)),
         )
         self.show_key_switch.bind(active=self._on_show_key_toggle)
         show_key_row.add_widget(self.show_key_switch)
-        show_key_row.add_widget(MDLabel(
-            text="Show API key",
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
-        ))
+        show_key_row.add_widget(MDBoxLayout())  # Spacer
         api_card.add_widget(show_key_row)
         
         # Test connection button
@@ -181,7 +189,7 @@ class SettingsScreen(MDScreen):
             radius=[dp(12)],
             md_bg_color=(0.071, 0.129, 0.212, 1),
             size_hint_y=None,
-            height=dp(160),
+            height=dp(220),  # Increased for samples per update field
         )
         
         update_header = MDLabel(
@@ -228,13 +236,35 @@ class SettingsScreen(MDScreen):
             size=(dp(48), dp(28)),
         )
         auto_row.add_widget(self.auto_update_switch)
-        auto_row.add_widget(MDLabel(
-            text="Enable automatic updates",
+        auto_row.add_widget(MDBoxLayout())  # Spacer
+        update_card.add_widget(auto_row)
+        
+        # Samples per update
+        samples_row = MDBoxLayout(spacing=dp(10), size_hint_y=None, height=dp(44))
+        samples_row.add_widget(MDLabel(
+            text="Samples per Update:",
+            font_style="Body2",
+            size_hint_x=0.5,
+            theme_text_color="Custom",
+            text_color=(0.91, 0.918, 0.929, 1),
+        ))
+        self.samples_per_update_input = MDTextField(
+            text="50",
+            hint_text="50",
+            mode="fill",
+            input_filter="int",
+            size_hint=(None, None),
+            size=(dp(80), dp(40)),
+        )
+        samples_row.add_widget(self.samples_per_update_input)
+        samples_row.add_widget(MDLabel(
+            text="per OS",
             font_style="Caption",
+            size_hint_x=0.3,
             theme_text_color="Custom",
             text_color=(0.604, 0.627, 0.651, 1),
         ))
-        update_card.add_widget(auto_row)
+        update_card.add_widget(samples_row)
         
         content.add_widget(update_card)
         
@@ -293,12 +323,7 @@ class SettingsScreen(MDScreen):
             size=(dp(48), dp(28)),
         )
         admin_row.add_widget(self.show_admin_switch)
-        admin_row.add_widget(MDLabel(
-            text="Include in browse",
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
-        ))
+        admin_row.add_widget(MDBoxLayout())  # Spacer
         pref_card.add_widget(admin_row)
         
         content.add_widget(pref_card)
@@ -404,6 +429,7 @@ class SettingsScreen(MDScreen):
         self.api_key_input.text = settings.get("api_key", "")
         self.update_freq_spinner.text = settings.get("update_frequency", "Daily")
         self.auto_update_switch.active = settings.get("auto_update", True)
+        self.samples_per_update_input.text = str(settings.get("samples_per_update", 50))
         self.default_os_spinner.text = settings.get("default_os", "Auto-detect")
         self.show_admin_switch.active = settings.get("show_admin", True)
     
@@ -414,16 +440,24 @@ class SettingsScreen(MDScreen):
             self._show_message("Error", "Database not available")
             return
         
+        # Parse samples per update (with validation)
+        try:
+            samples_per_update = int(self.samples_per_update_input.text or "50")
+            samples_per_update = max(10, min(200, samples_per_update))  # Clamp between 10-200
+        except ValueError:
+            samples_per_update = 50
+        
         settings = {
             "api_key": self.api_key_input.text,
             "update_frequency": self.update_freq_spinner.text,
             "auto_update": self.auto_update_switch.active,
+            "samples_per_update": samples_per_update,
             "default_os": self.default_os_spinner.text,
             "show_admin": self.show_admin_switch.active,
         }
         
         app.database.save_settings(settings)
-        logger.info("Settings saved")
+        logger.info(f"Settings saved (samples_per_update: {samples_per_update})")
         
         self._show_message("Success", "Settings saved successfully!")
     

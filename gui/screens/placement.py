@@ -227,7 +227,13 @@ class PlacementScreen(MDScreen):
         main_layout.add_widget(warning_card)
         
         # ===== ARTIFACTS LIST =====
-        scroll = ScrollView(size_hint=(1, 1))
+        scroll = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(12),
+            bar_color=(0.3, 0.5, 0.8, 0.9),
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),
+            scroll_type=['bars', 'content'],
+        )
         self.items_layout = MDBoxLayout(
             orientation="vertical",
             spacing=dp(12),

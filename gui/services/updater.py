@@ -288,9 +288,12 @@ class UpdateService:
                 # Search for samples with tag:evasion, filtered by OS
                 # The new API infers OS from file extension and platform fields
                 try:
+                    # Get configurable sample limit from settings (default: 50)
+                    sample_limit = app.database.get_setting("samples_per_update", 50)
+                    
                     samples = list(client.search_evasion_samples(
                         os_filter=os_type,  # Filter by OS type
-                        limit=30,
+                        limit=sample_limit,
                         fetch_overview=True,  # Get overview for accurate OS detection
                     ))
                 except Exception as e:
@@ -464,8 +467,9 @@ class UpdateService:
         
         artifact_id = f"art-{artifact.os.value}-{artifact.artifact_type.value}-{hash(artifact.match_criteria.value) & 0xFFFFFFFF:08x}"
         
-        # Build Triage URL from sample ID
-        triage_url = f"https://tria.ge/{sample_id}" if sample_id else ""
+        # Build Triage URL from sample ID (using private cloud)
+        # Private cloud samples use private.tria.ge, public use tria.ge
+        triage_url = f"https://private.tria.ge/{sample_id}" if sample_id else ""
         
         return {
             "id": artifact_id,

@@ -352,7 +352,13 @@ class DashboardScreen(MDScreen):
             size_hint_y=1,
         )
         
-        scroll = ScrollView(size_hint=(1, 1))
+        scroll = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(12),
+            bar_color=(0.3, 0.5, 0.8, 0.9),
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),
+            scroll_type=['bars', 'content'],
+        )
         self.activity_layout = MDBoxLayout(
             orientation="vertical",
             size_hint_y=None,

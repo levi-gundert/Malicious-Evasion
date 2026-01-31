@@ -5,7 +5,45 @@ logs/
 
 # Virtualenv
 .venv/
+venv/
+env/
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Secrets and credentials - NEVER commit these
+.env
+.env.*
+*.env
+secrets.yaml
+secrets.yml
+credentials.json
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Application data
+*.db
+!tests/fixtures/**/*.db

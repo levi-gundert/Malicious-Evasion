@@ -105,7 +105,7 @@ class DashboardScreen(MDScreen):
         # ===== HEADER =====
         header = MDBoxLayout(
             size_hint_y=None,
-            height=dp(100),
+            height=dp(150),
             spacing=dp(20),
         )
         
@@ -115,7 +115,7 @@ class DashboardScreen(MDScreen):
             mascot = Image(
                 source=str(mascot_path),
                 size_hint=(None, None),
-                size=(dp(80), dp(80)),
+                size=(dp(140), dp(140)),
                 fit_mode="contain",
             )
             header.add_widget(mascot)
@@ -393,7 +393,8 @@ class DashboardScreen(MDScreen):
     def _set_progress(self, percent: float):
         """Set progress bar value (0-100)."""
         self._progress_value = max(0, min(100, percent))
-        self.progress_bar.value = self._progress_value / 100
+        # MDProgressBar uses 0-100 scale (not 0-1)
+        self.progress_bar.value = self._progress_value
         
         if percent > 0:
             self.progress_percent.text = f"{int(percent)}%"

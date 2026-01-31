@@ -285,13 +285,13 @@ class UpdateService:
                 
                 logger.info(f"Searching for {os_type} samples...")
                 
-                # Search for samples
+                # Search for samples with tag:evasion, filtered by OS
+                # The new API infers OS from file extension and platform fields
                 try:
                     samples = list(client.search_evasion_samples(
-                        os_type=os_type,
-                        min_score=5,
-                        days=7,
+                        os_filter=os_type,  # Filter by OS type
                         limit=30,
+                        fetch_overview=True,  # Get overview for accurate OS detection
                     ))
                 except Exception as e:
                     logger.warning(f"Error searching {os_type}: {e}")
@@ -309,10 +309,18 @@ class UpdateService:
                     if not sample_id:
                         continue
                     
+                    # Use the inferred_os from search results (already filtered)
+                    inferred_os = sample.get("inferred_os", os_type)
+                    logger.debug(f"Processing {sample_id} (inferred OS: {inferred_os})")
+                    
                     try:
                         # Fetch sample data
                         data = client.fetch_sample_data(sample_id)
                         overview = data.get("overview", {})
+                        
+                        if not overview:
+                            logger.debug(f"No overview for {sample_id}, skipping")
+                            continue
                         
                         # Extract sample hashes from overview
                         sample_info = overview.get("sample", {})
@@ -323,11 +331,11 @@ class UpdateService:
                         score = overview.get("analysis", {}).get("score", 0)
                         if score is None:
                             score = sample_info.get("score", 0)
-                        if score < 5:
+                        if score is not None and score < 5:
+                            logger.debug(f"Score {score} < 5 for {sample_id}, skipping")
                             continue
                         
-                        # Extract artifacts - let pipeline auto-detect OS from sample data
-                        # This handles cases where search returns mixed OS results
+                        # Use the already-detected OS from search, or re-detect from overview
                         detected_os = detect_os_from_overview(overview)
                         
                         if detected_os is None:
@@ -338,6 +346,8 @@ class UpdateService:
                         if detected_os.value != os_type:
                             logger.debug(f"Sample {sample_id} is {detected_os.value}, not {os_type}; skipping")
                             continue
+                        
+                        logger.info(f"Extracting artifacts from {sample_id} ({detected_os.value})")
                         
                         result = extract_sample(
                             overview=overview,

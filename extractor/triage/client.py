@@ -21,6 +21,199 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# OS Inference from File Extension
+# =============================================================================
+
+# File extension to OS mapping
+# Based on common malware file types per platform
+FILE_EXTENSION_TO_OS = {
+    # Android
+    ".apk": "android",
+    ".aab": "android",  # Android App Bundle
+    ".dex": "android",
+    
+    # Windows
+    ".exe": "windows",
+    ".dll": "windows",
+    ".msi": "windows",
+    ".scr": "windows",  # Screensaver (often used by malware)
+    ".sys": "windows",  # Driver
+    ".cpl": "windows",  # Control Panel
+    ".ocx": "windows",  # ActiveX
+    ".drv": "windows",  # Driver
+    ".bat": "windows",
+    ".cmd": "windows",
+    ".ps1": "windows",  # PowerShell
+    ".vbs": "windows",  # VBScript
+    ".js": "windows",   # JScript (Windows context)
+    ".hta": "windows",  # HTML Application
+    ".lnk": "windows",  # Shortcut
+    
+    # macOS
+    ".dmg": "macos",
+    ".pkg": "macos",
+    ".app": "macos",
+    ".command": "macos",
+    
+    # Linux (note: many Linux binaries have no extension)
+    ".elf": "linux",
+    ".so": "linux",
+    ".deb": "linux",
+    ".rpm": "linux",
+    ".sh": "linux",
+}
+
+# Platform string patterns in Triage task data
+# Maps platform substrings to OS types
+PLATFORM_PATTERNS = {
+    "android": "android",
+    "windows": "windows",
+    "win7": "windows",
+    "win10": "windows",
+    "win11": "windows",
+    "linux": "linux",
+    "ubuntu": "linux",
+    "debian": "linux",
+    "centos": "linux",
+    "macos": "macos",
+    "darwin": "macos",
+    "osx": "macos",
+}
+
+
+def infer_os_from_filename(filename: str) -> str | None:
+    """
+    Infer OS type from filename extension.
+    
+    Args:
+        filename: The target filename (e.g., "malware.apk", "trojan.exe")
+        
+    Returns:
+        OS type string ("android", "windows", "linux", "macos") or None if unknown
+    """
+    if not filename:
+        logger.debug("infer_os_from_filename: empty filename")
+        return None
+    
+    # Normalize and get extension
+    filename_lower = filename.lower()
+    
+    # Try each extension mapping
+    for ext, os_type in FILE_EXTENSION_TO_OS.items():
+        if filename_lower.endswith(ext):
+            logger.debug(f"infer_os_from_filename: '{filename}' -> {os_type} (matched {ext})")
+            return os_type
+    
+    logger.debug(f"infer_os_from_filename: '{filename}' -> None (no extension match)")
+    return None
+
+
+def infer_os_from_platform(platform: str) -> str | None:
+    """
+    Infer OS type from Triage platform string.
+    
+    Args:
+        platform: Platform string from task data (e.g., "windows10_x64", "android-11-x64")
+        
+    Returns:
+        OS type string or None if unknown
+    """
+    if not platform:
+        return None
+    
+    platform_lower = platform.lower()
+    
+    for pattern, os_type in PLATFORM_PATTERNS.items():
+        if pattern in platform_lower:
+            logger.debug(f"infer_os_from_platform: '{platform}' -> {os_type} (matched {pattern})")
+            return os_type
+    
+    logger.debug(f"infer_os_from_platform: '{platform}' -> None (no pattern match)")
+    return None
+
+
+def infer_os_from_sample(sample_data: dict[str, Any]) -> str | None:
+    """
+    Infer OS type from sample data using multiple strategies.
+    
+    Tries in order:
+    1. Task platform/os field (most reliable when available)
+    2. Target filename extension
+    3. Analysis tags
+    
+    Args:
+        sample_data: Sample or overview data from Triage API
+        
+    Returns:
+        OS type string or None if cannot be determined
+    """
+    # Strategy 1: Check tasks for platform/os field
+    tasks = sample_data.get("tasks", {})
+    if isinstance(tasks, dict):
+        for task_id, task_info in tasks.items():
+            if isinstance(task_info, dict):
+                # Check 'os' field (e.g., "android-11-x64")
+                os_field = task_info.get("os", "")
+                os_type = infer_os_from_platform(os_field)
+                if os_type:
+                    logger.debug(f"infer_os_from_sample: found OS from task.os: {os_type}")
+                    return os_type
+                
+                # Check 'platform' field (e.g., "windows10_x64")
+                platform_field = task_info.get("platform", "")
+                os_type = infer_os_from_platform(platform_field)
+                if os_type:
+                    logger.debug(f"infer_os_from_sample: found OS from task.platform: {os_type}")
+                    return os_type
+    
+    # Strategy 2: Check target filename extension
+    # Try multiple locations where filename might be
+    filename = (
+        sample_data.get("target") or
+        sample_data.get("sample", {}).get("target") or
+        sample_data.get("sample", {}).get("name") or
+        ""
+    )
+    os_type = infer_os_from_filename(filename)
+    if os_type:
+        logger.debug(f"infer_os_from_sample: found OS from filename: {os_type}")
+        return os_type
+    
+    # Strategy 3: Check analysis tags
+    analysis_tags = sample_data.get("analysis", {}).get("tags", [])
+    for tag in analysis_tags:
+        tag_lower = tag.lower()
+        if "android" in tag_lower:
+            logger.debug("infer_os_from_sample: found 'android' in analysis tags")
+            return "android"
+        if "windows" in tag_lower:
+            logger.debug("infer_os_from_sample: found 'windows' in analysis tags")
+            return "windows"
+        if "linux" in tag_lower:
+            logger.debug("infer_os_from_sample: found 'linux' in analysis tags")
+            return "linux"
+        if "macos" in tag_lower:
+            logger.debug("infer_os_from_sample: found 'macos' in analysis tags")
+            return "macos"
+    
+    # Strategy 4: Check sample-level tags
+    sample_tags = sample_data.get("sample", {}).get("tags", [])
+    for tag in sample_tags:
+        tag_lower = tag.lower()
+        if "android" in tag_lower or "apk" in tag_lower:
+            return "android"
+        if "windows" in tag_lower or "pe" in tag_lower:
+            return "windows"
+        if "linux" in tag_lower or "elf" in tag_lower:
+            return "linux"
+        if "macos" in tag_lower or "mach-o" in tag_lower:
+            return "macos"
+    
+    logger.debug("infer_os_from_sample: could not determine OS")
+    return None
+
+
 class TriageAPIError(Exception):
     """Base exception for Triage API errors."""
     
@@ -93,9 +286,9 @@ class TriageClient:
     
     Example:
         client = TriageClient(api_key="your-key")
-        samples = client.search("tag:android AND score:>=7")
-        for sample in samples:
-            overview = client.get_overview(sample["id"])
+        # Search for evasion samples
+        for sample in client.search_evasion_samples():
+            print(f"Sample: {sample['id']}, OS: {sample.get('inferred_os')}")
     """
     
     # Known API base URLs
@@ -114,6 +307,7 @@ class TriageClient:
         self,
         api_key: str | None = None,
         base_url: str | None = None,
+        use_private_cloud: bool = True,
         requests_per_minute: int = 20,
         timeout: int = 30,
         max_retries: int = 3,
@@ -124,7 +318,8 @@ class TriageClient:
         
         Args:
             api_key: Triage API key (or TRIAGE_API_KEY env var)
-            base_url: API base URL (auto-detected if None)
+            base_url: API base URL (overrides use_private_cloud if set)
+            use_private_cloud: If True, use private.tria.ge; else use api.tria.ge
             requests_per_minute: Rate limit (default 20/min)
             timeout: Request timeout in seconds
             max_retries: Max retries for failed requests
@@ -138,8 +333,17 @@ class TriageClient:
                 "or pass api_key parameter."
             )
         
-        # Base URL - try private cloud first since user has private key
-        self.base_url = base_url or self.PRIVATE_API
+        # Base URL - configurable between public and private cloud
+        if base_url:
+            self.base_url = base_url
+            logger.debug(f"Using custom base URL: {base_url}")
+        elif use_private_cloud:
+            self.base_url = self.PRIVATE_API
+            logger.debug("Using private cloud API")
+        else:
+            self.base_url = self.PUBLIC_API
+            logger.debug("Using public cloud API")
+        
         self.timeout = timeout
         
         # Rate limiter
@@ -314,115 +518,154 @@ class TriageClient:
         
         logger.info(f"Search returned {returned} samples")
     
-    # Search queries by OS type
-    # Windows samples are found via malware family names and behavior tags
-    # Android samples use the "android" tag
-    # Linux/macOS samples also need specific queries
-    OS_SEARCH_QUERIES = {
-        "android": [
-            "tag:android",
-        ],
-        "windows": [
-            # Known Windows malware families
-            "family:emotet",
-            "family:remcos",
-            "family:redline",
-            "family:lokibot",
-            "family:formbook",
-            "family:asyncrat",
-            "family:njrat",
-            "family:agenttesla",
-            "family:raccoon",
-            "family:vidar",
-            "family:quasar",
-            # Behavior-based tags
-            "tag:stealer",
-            "tag:ransomware",
-            "tag:loader",
-            "tag:rat",
-        ],
-        "linux": [
-            "tag:linux",
-            "tag:elf",
-            "family:mirai",
-            "family:gafgyt",
-        ],
-        "macos": [
-            "tag:macos",
-            "tag:mach-o",
-        ],
-    }
-    
     def search_evasion_samples(
         self,
-        os_type: str,
-        min_score: int = 5,
-        days: int = 7,
-        limit: int = 20,
-        include_evasion_tag: bool = True,
+        os_filter: str | list[str] | None = None,
+        limit: int = 50,
+        fetch_overview: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """
-        Search for samples with evasion behavior.
+        Search for samples with evasion behavior (tag:evasion).
         
-        Note: Score is NOT available in search results, only in overview.
-        The min_score parameter is documented but cannot be applied here.
-        Filtering by score should happen after fetching the overview.
+        This is the primary search method for finding malware samples with
+        anti-analysis/evasion techniques. Since Triage doesn't have an OS filter
+        in the search API, we search for tag:evasion and infer OS from:
+        1. The task platform/os field
+        2. The target filename extension
+        3. Analysis tags
         
         Args:
-            os_type: OS to search (android, windows, linux, macos)
-            min_score: Minimum score threshold (for documentation only)
-            days: Look back period in days
-            limit: Maximum results
-            include_evasion_tag: Also search for "tag:evasion" samples
+            os_filter: Optional OS filter - "android", "windows", "linux", "macos"
+                       or list of OS types. Samples not matching are skipped.
+            limit: Maximum number of samples to return
+            fetch_overview: If True, fetch full overview for each sample
+                           (slower but provides more accurate OS detection)
             
         Yields:
-            Sample dicts from search results
+            Sample dicts with added 'inferred_os' field
+            
+        Example:
+            # Get all evasion samples
+            for sample in client.search_evasion_samples(limit=100):
+                print(f"{sample['id']}: {sample['inferred_os']}")
+            
+            # Get only Windows evasion samples  
+            for sample in client.search_evasion_samples(os_filter="windows"):
+                print(sample['id'])
         """
-        seen_ids = set()
-        os_type_lower = os_type.lower()
+        # Normalize OS filter to a set for fast lookup
+        os_filter_set: set[str] | None = None
+        if os_filter:
+            if isinstance(os_filter, str):
+                os_filter_set = {os_filter.lower()}
+            else:
+                os_filter_set = {os.lower() for os in os_filter}
+            logger.info(f"Searching for evasion samples, OS filter: {os_filter_set}")
+        else:
+            logger.info(f"Searching for all evasion samples (no OS filter)")
         
-        # Get search queries for this OS
-        queries = self.OS_SEARCH_QUERIES.get(os_type_lower, [f"tag:{os_type_lower}"])
+        # Search for tag:evasion - this is the primary search
+        query = "tag:evasion"
+        logger.debug(f"Executing search query: {query}")
         
-        logger.info(f"Searching for {os_type} samples using {len(queries)} queries (limit={limit})")
+        returned = 0
+        skipped_no_os = 0
+        skipped_os_filter = 0
         
-        # Calculate limit per query to avoid over-fetching
-        # but ensure we get enough results
-        per_query_limit = max(limit // len(queries), 5) if queries else limit
-        
-        for query in queries:
-            if len(seen_ids) >= limit:
+        for sample in self.search(query, limit=limit * 2):  # Over-fetch to account for filtering
+            if returned >= limit:
                 break
             
-            logger.debug(f"Running query: {query}")
-            
-            try:
-                for sample in self.search(query, limit=per_query_limit):
-                    sample_id = sample.get("id")
-                    if sample_id and sample_id not in seen_ids:
-                        seen_ids.add(sample_id)
-                        yield sample
-                        
-                        if len(seen_ids) >= limit:
-                            break
-            except TriageAPIError as e:
-                logger.warning(f"Query '{query}' failed: {e}")
+            sample_id = sample.get("id")
+            if not sample_id:
                 continue
-        
-        # Also search for samples tagged with "evasion"
-        if include_evasion_tag and len(seen_ids) < limit:
-            logger.debug("Searching for evasion-tagged samples")
             
-            try:
-                for sample in self.search("tag:evasion", limit=limit - len(seen_ids)):
-                    sample_id = sample.get("id")
-                    if sample_id and sample_id not in seen_ids:
-                        seen_ids.add(sample_id)
-                        yield sample
-            except TriageAPIError:
-                pass
+            # Infer OS from the search result data
+            # Search results have limited data, so we may need the overview
+            inferred_os = infer_os_from_sample(sample)
+            
+            # If we couldn't infer OS and fetch_overview is enabled, get full data
+            if inferred_os is None and fetch_overview:
+                logger.debug(f"Fetching overview for {sample_id} to determine OS")
+                try:
+                    overview = self.get_overview(sample_id)
+                    inferred_os = infer_os_from_sample(overview)
+                except TriageAPIError as e:
+                    logger.warning(f"Failed to fetch overview for {sample_id}: {e}")
+            
+            # Skip if we still can't determine OS (unless no filter)
+            if inferred_os is None:
+                skipped_no_os += 1
+                logger.debug(f"Could not infer OS for {sample_id}, skipping")
+                continue
+            
+            # Apply OS filter if specified
+            if os_filter_set and inferred_os not in os_filter_set:
+                skipped_os_filter += 1
+                logger.debug(f"Sample {sample_id} is {inferred_os}, not in filter {os_filter_set}")
+                continue
+            
+            # Add inferred OS to sample data for downstream use
+            sample["inferred_os"] = inferred_os
+            
+            returned += 1
+            yield sample
         
-        logger.info(f"Found {len(seen_ids)} unique samples for {os_type}")
+        # Log summary
+        logger.info(
+            f"Evasion search complete: returned={returned}, "
+            f"skipped_no_os={skipped_no_os}, skipped_os_filter={skipped_os_filter}"
+        )
+    
+    def search_evasion_samples_by_os(
+        self,
+        limit_per_os: int = 20,
+        os_types: list[str] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """
+        Search for evasion samples and group by OS type.
+        
+        Convenience method that searches for tag:evasion and groups results
+        by inferred OS type.
+        
+        Args:
+            limit_per_os: Maximum samples per OS type
+            os_types: List of OS types to include (default: all)
+            
+        Returns:
+            Dict mapping OS type to list of samples
+            
+        Example:
+            samples_by_os = client.search_evasion_samples_by_os(limit_per_os=10)
+            print(f"Android: {len(samples_by_os['android'])} samples")
+            print(f"Windows: {len(samples_by_os['windows'])} samples")
+        """
+        if os_types is None:
+            os_types = ["android", "windows", "linux", "macos"]
+        
+        result: dict[str, list[dict[str, Any]]] = {os: [] for os in os_types}
+        
+        logger.info(f"Searching for evasion samples, grouping by OS: {os_types}")
+        
+        # Calculate total limit based on desired per-OS limit
+        total_limit = limit_per_os * len(os_types) * 2  # Over-fetch to get better coverage
+        
+        for sample in self.search_evasion_samples(limit=total_limit):
+            os_type = sample.get("inferred_os")
+            
+            if os_type and os_type in result:
+                if len(result[os_type]) < limit_per_os:
+                    result[os_type].append(sample)
+            
+            # Check if we've filled all buckets
+            if all(len(samples) >= limit_per_os for samples in result.values()):
+                break
+        
+        # Log summary
+        for os_type, samples in result.items():
+            logger.info(f"Found {len(samples)} {os_type} evasion samples")
+        
+        return result
     
     # =========================================================================
     # Sample Data
@@ -619,32 +862,22 @@ class TriageClient:
         return result
     
     def _detect_os(self, overview: dict[str, Any]) -> str | None:
-        """Detect OS type from overview data."""
-        # Check analysis tags
-        analysis = overview.get("analysis", {})
-        tags = analysis.get("tags", [])
+        """
+        Detect OS type from overview data.
         
-        for tag in tags:
-            tag_lower = tag.lower()
-            if "android" in tag_lower:
-                return "android"
-            if "windows" in tag_lower:
-                return "windows"
-            if "linux" in tag_lower:
-                return "linux"
-            if "macos" in tag_lower:
-                return "macos"
+        Uses the robust infer_os_from_sample function which checks:
+        1. Task platform/os fields
+        2. Target filename extension
+        3. Analysis tags
+        4. Sample tags
         
-        # Check sample target filename
-        sample = overview.get("sample", {})
-        filename = sample.get("target", "") or sample.get("name", "")
-        
-        if filename.endswith(".apk"):
-            return "android"
-        if filename.endswith((".exe", ".dll")):
-            return "windows"
-        
-        return None
+        Args:
+            overview: Sample overview data from Triage
+            
+        Returns:
+            OS type string or None if cannot be determined
+        """
+        return infer_os_from_sample(overview)
     
     def test_connection(self) -> bool:
         """

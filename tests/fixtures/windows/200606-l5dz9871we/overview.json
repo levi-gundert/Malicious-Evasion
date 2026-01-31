@@ -1,0 +1,220 @@
+{
+  "version": "0.3.0",
+  "sample": {
+    "id": "200606-l5dz9871we",
+    "target": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2.exe",
+    "score": 10,
+    "submitted": "2020-06-06T00:03:27Z",
+    "completed": "2020-06-06T00:06:10Z",
+    "md5": "a1b2c3d4e5f6789012345678abcdef01",
+    "sha1": "1234567890abcdef1234567890abcdef12345678",
+    "sha256": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2",
+    "size": 123456
+  },
+  "analysis": {
+    "score": 10,
+    "tags": [
+      "windows",
+      "evasion",
+      "trojan",
+      "persistence",
+      "ransomware"
+    ],
+    "family": [
+      "sodin",
+      "revil"
+    ]
+  },
+  "tasks": {
+    "200606-l5dz9871we-behavioral1": {
+      "kind": "behavioral",
+      "name": "behavioral1",
+      "status": "reported",
+      "score": 10,
+      "os": "windows7_x64",
+      "platform": "windows7_x64",
+      "resource": "win7v200430",
+      "backend": "horse2",
+      "target": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2.exe",
+      "tags": [
+        "evasion",
+        "trojan",
+        "persistence",
+        "ransomware"
+      ]
+    },
+    "200606-l5dz9871we-behavioral2": {
+      "kind": "behavioral",
+      "name": "behavioral2",
+      "status": "reported",
+      "score": 10,
+      "os": "windows10_x64",
+      "platform": "windows10_x64",
+      "resource": "win10v200430",
+      "backend": "horse2",
+      "target": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2.exe",
+      "tags": [
+        "evasion",
+        "trojan",
+        "ransomware",
+        "persistence"
+      ]
+    },
+    "200606-l5dz9871we-static1": {
+      "kind": "static",
+      "name": "static1",
+      "status": "reported",
+      "score": 8
+    }
+  },
+  "targets": [
+    {
+      "target": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2.exe",
+      "score": 10,
+      "md5": "a1b2c3d4e5f6789012345678abcdef01",
+      "sha256": "05af0cf40590aef24b28fa04c6b4998b7ab3b7f26e60c507adb84f3d837778f2",
+      "tags": [
+        "evasion",
+        "trojan",
+        "persistence",
+        "ransomware"
+      ],
+      "iocs": {
+        "domains": [
+          "decryptor.cc",
+          "aplebzu47wgazapdqks6vrcv6zcnjppkbxbr6wketf56nf6aq2nmyoyd.onion"
+        ],
+        "ips": [
+          "192.168.1.100"
+        ]
+      },
+      "tasks": [
+        "behavioral1",
+        "behavioral2"
+      ]
+    }
+  ],
+  "signatures": [
+    {
+      "name": "Checks for VirtualBox Guest Additions",
+      "desc": "Checks for the presence of VirtualBox Guest Additions by looking for specific files and registry keys",
+      "score": 7,
+      "tags": [
+        "evasion"
+      ],
+      "ttp": [
+        "T1497.001"
+      ],
+      "indicators": [
+        {
+          "ioc": "C:\\Program Files\\Oracle\\VirtualBox Guest Additions\\VBoxTray.exe",
+          "description": "VirtualBox tray application"
+        },
+        {
+          "ioc": "HKLM\\SOFTWARE\\Oracle\\VirtualBox Guest Additions",
+          "description": "VirtualBox registry key"
+        }
+      ]
+    },
+    {
+      "name": "Checks for VMware",
+      "desc": "Detects VMware virtual environment by checking for VMware-specific files and drivers",
+      "score": 7,
+      "tags": [
+        "evasion"
+      ],
+      "ttp": [
+        "T1497.001"
+      ],
+      "indicators": [
+        {
+          "ioc": "C:\\Windows\\System32\\drivers\\vmhgfs.sys",
+          "description": "VMware HGFS driver"
+        },
+        {
+          "ioc": "C:\\Windows\\System32\\drivers\\vmmouse.sys",
+          "description": "VMware mouse driver"
+        },
+        {
+          "ioc": "vmtoolsd.exe",
+          "description": "VMware tools daemon process"
+        }
+      ]
+    },
+    {
+      "name": "Checks for analysis tools",
+      "desc": "Enumerates running processes to detect analysis and debugging tools",
+      "score": 6,
+      "tags": [
+        "evasion"
+      ],
+      "ttp": [
+        "T1057"
+      ],
+      "indicators": [
+        {
+          "ioc": "procmon.exe",
+          "description": "Process Monitor"
+        },
+        {
+          "ioc": "wireshark.exe",
+          "description": "Wireshark network analyzer"
+        },
+        {
+          "ioc": "x64dbg.exe",
+          "description": "x64dbg debugger"
+        }
+      ]
+    },
+    {
+      "name": "Checks system information via WMI",
+      "desc": "Uses WMI to query system information that may reveal virtualization",
+      "score": 5,
+      "tags": [
+        "evasion"
+      ],
+      "ttp": [
+        "T1047"
+      ],
+      "indicators": [
+        {
+          "ioc": "SELECT * FROM Win32_ComputerSystem",
+          "description": "WMI query for computer system info"
+        }
+      ]
+    },
+    {
+      "name": "Creates mutex",
+      "desc": "Creates a named mutex object",
+      "score": 3,
+      "indicators": [
+        {
+          "ioc": "Global\\{sodin-mutex-12345}",
+          "description": "Sodin ransomware mutex"
+        }
+      ]
+    },
+    {
+      "name": "Modifies registry for persistence",
+      "desc": "Writes to Run key for persistence",
+      "score": 8,
+      "tags": [
+        "persistence"
+      ],
+      "ttp": [
+        "T1547.001"
+      ]
+    },
+    {
+      "name": "Encrypts files",
+      "desc": "Encrypts user files with ransomware behavior",
+      "score": 10,
+      "tags": [
+        "ransomware"
+      ],
+      "ttp": [
+        "T1486"
+      ]
+    }
+  ]
+}

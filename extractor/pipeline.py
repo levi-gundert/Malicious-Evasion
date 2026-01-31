@@ -47,64 +47,35 @@ def detect_os_from_overview(overview: dict[str, Any]) -> OSType | None:
     """
     Detect OS type from sample overview data.
     
+    Uses the same logic as infer_os_from_sample() in client.py:
+    1. Check tasks for os/platform field (most reliable)
+    2. Check analysis tags
+    3. Check target filename extension
+    4. Check sample tags
+    
     Args:
         overview: Sample overview JSON from Triage
         
     Returns:
         OSType or None if not detectable
     """
-    # Check analysis tags first (Triage private cloud format)
-    analysis = overview.get("analysis", {})
-    analysis_tags = analysis.get("tags", [])
+    # Use the client's inference function for consistency
+    from extractor.triage.client import infer_os_from_sample
     
-    for tag in analysis_tags:
-        tag_lower = tag.lower()
-        if "android" in tag_lower:
-            return OSType.ANDROID
-        if "windows" in tag_lower:
-            return OSType.WINDOWS
-        if "linux" in tag_lower:
-            return OSType.LINUX
-        if "macos" in tag_lower:
-            return OSType.MACOS
+    os_str = infer_os_from_sample(overview)
     
-    # Check targets for platform info
-    targets = overview.get("targets", [])
-    for target in targets:
-        platform = target.get("platform", "").lower()
-        
-        if "android" in platform:
-            return OSType.ANDROID
-        if "windows" in platform:
-            return OSType.WINDOWS
-        if "linux" in platform:
-            return OSType.LINUX
-        if "macos" in platform or "darwin" in platform:
-            return OSType.MACOS
-    
-    # Check sample tags and filename
-    sample = overview.get("sample", {})
-    tags = sample.get("tags", [])
-    
-    for tag in tags:
-        tag_lower = tag.lower()
-        if "android" in tag_lower or "apk" in tag_lower:
-            return OSType.ANDROID
-        if "windows" in tag_lower or "exe" in tag_lower or "dll" in tag_lower:
-            return OSType.WINDOWS
-        if "linux" in tag_lower or "elf" in tag_lower:
-            return OSType.LINUX
-        if "macos" in tag_lower or "mach-o" in tag_lower:
-            return OSType.MACOS
-    
-    # Check filename extension
-    filename = sample.get("name", "") or sample.get("target", "")
-    if filename.endswith(".apk"):
-        return OSType.ANDROID
-    if filename.endswith((".exe", ".dll", ".msi")):
-        return OSType.WINDOWS
-    if filename.endswith((".dmg", ".app")):
-        return OSType.MACOS
+    if os_str:
+        # Convert string to OSType enum
+        os_map = {
+            "android": OSType.ANDROID,
+            "windows": OSType.WINDOWS,
+            "linux": OSType.LINUX,
+            "macos": OSType.MACOS,
+        }
+        os_type = os_map.get(os_str.lower())
+        if os_type:
+            logger.debug(f"Detected OS from overview: {os_type.value}")
+            return os_type
     
     logger.warning(f"Could not detect OS from overview")
     return None
@@ -431,7 +402,7 @@ def run_extraction_pipeline(
         "extracted_at": result.extracted_at.isoformat(),
         "statistics": {
             "total_artifacts": result.statistics.total_artifacts,
-            "by_os": {os.value: count for os, count in result.statistics.by_os.items()},
+            "by_os": dict(result.statistics.by_os),  # Already string keys
         },
         "errors": len(result.errors),
         "output_files": {
@@ -456,28 +427,35 @@ def extract_from_api(
     days: int = 7,
     max_samples: int = 20,
     filter_config: FilterConfig | None = None,
+    use_private_cloud: bool = True,
 ) -> ExtractionResult:
     """
     Extract artifacts from live Triage API.
     
+    Searches for samples with tag:evasion and filters by inferred OS.
+    OS is inferred from file extension and platform fields since there's
+    no OS filter in the Triage search API.
+    
     Args:
         api_key: Triage API key (or use TRIAGE_API_KEY env var)
-        os_filter: List of OS types to search (default: android, windows)
+        os_filter: List of OS types to include (default: all)
+                   Samples are filtered by inferred OS after search.
         min_score: Minimum sample score to include
-        days: Look back period in days
-        max_samples: Maximum samples per OS
+        days: Look back period in days (currently unused - for future date filtering)
+        max_samples: Maximum samples to process total
         filter_config: Optional filter configuration
+        use_private_cloud: If True, use private.tria.ge; else use api.tria.ge
         
     Returns:
         Aggregated ExtractionResult
     """
     from extractor.triage.client import TriageClient, TriageAPIError
     
-    logger.info("Extracting from live Triage API...")
+    logger.info("Extracting from live Triage API (searching for tag:evasion)...")
     
-    # Initialize client
+    # Initialize client with configurable cloud setting
     try:
-        client = TriageClient(api_key=api_key)
+        client = TriageClient(api_key=api_key, use_private_cloud=use_private_cloud)
     except ValueError as e:
         logger.error(f"Client initialization failed: {e}")
         result = ExtractionResult()
@@ -490,78 +468,84 @@ def extract_from_api(
         result.add_error(sample_id="", error="Failed to connect to Triage API")
         return result
     
-    # Default OS targets
-    if os_filter is None:
-        os_filter = ["android", "windows"]
-    
     results: list[ExtractionResult] = []
     
-    for os_type in os_filter:
-        logger.info(f"Searching for {os_type} samples...")
+    # Search for evasion samples with optional OS filter
+    # The new search_evasion_samples method handles OS filtering internally
+    logger.info(f"Searching for evasion samples (OS filter: {os_filter}, limit: {max_samples})")
+    
+    try:
+        # Search with OS filter - samples will have 'inferred_os' field
+        samples = list(client.search_evasion_samples(
+            os_filter=os_filter,
+            limit=max_samples,
+            fetch_overview=True,  # Get overview for accurate OS detection
+        ))
+    except TriageAPIError as e:
+        logger.error(f"Search failed: {e}")
+        result = ExtractionResult()
+        result.add_error(sample_id="", error=f"Search failed: {e}")
+        return result
+    
+    logger.info(f"Found {len(samples)} evasion samples matching filter")
+    
+    # Process each sample
+    processed = 0
+    for sample in samples:
+        sample_id = sample.get("id")
+        inferred_os = sample.get("inferred_os")
         
-        try:
-            samples = list(client.search_evasion_samples(
-                os_type=os_type,
-                min_score=min_score,
-                days=days,
-                limit=max_samples,
-            ))
-        except TriageAPIError as e:
-            logger.error(f"Search failed for {os_type}: {e}")
+        if not sample_id:
             continue
         
-        logger.info(f"Found {len(samples)} {os_type} samples from search")
+        logger.info(f"Processing sample {sample_id} (inferred OS: {inferred_os})...")
         
-        processed = 0
-        for sample in samples:
-            sample_id = sample.get("id")
-            if not sample_id:
+        try:
+            # Fetch full sample data
+            data = client.fetch_sample_data(sample_id)
+            
+            if not data.get("overview"):
+                logger.warning(f"No overview for {sample_id}")
                 continue
             
-            logger.info(f"Processing {os_type}/{sample_id}...")
+            # Check score from overview
+            overview = data["overview"]
+            score = overview.get("analysis", {}).get("score", 0)
+            if score is None:
+                score = overview.get("sample", {}).get("score", 0)
             
-            try:
-                # Fetch full sample data
-                data = client.fetch_sample_data(sample_id)
-                
-                if not data.get("overview"):
-                    logger.warning(f"No overview for {sample_id}")
-                    continue
-                
-                # Check score from overview (not available in search results)
-                overview = data["overview"]
-                score = overview.get("analysis", {}).get("score", 0)
-                if score is None:
-                    score = overview.get("sample", {}).get("score", 0)
-                
-                if score < min_score:
-                    logger.debug(f"Skipping {sample_id}: score {score} < {min_score}")
-                    continue
-                
-                if not data.get("behavioral_report"):
-                    logger.warning(f"No behavioral report for {sample_id}")
-                    continue
-                
-                # Extract
-                result = extract_sample(
-                    overview=data["overview"],
-                    behavioral_report=data["behavioral_report"],
-                    kernel_logs=data.get("kernel_logs"),
-                )
-                results.append(result)
-                processed += 1
-                
-            except TriageAPIError as e:
-                logger.error(f"Failed to fetch {sample_id}: {e}")
-                error_result = ExtractionResult()
-                error_result.add_error(sample_id=sample_id, error=str(e))
-                results.append(error_result)
+            if score is not None and score < min_score:
+                logger.debug(f"Skipping {sample_id}: score {score} < {min_score}")
+                continue
             
-            except Exception as e:
-                logger.error(f"Failed to process {sample_id}: {e}")
-                error_result = ExtractionResult()
-                error_result.add_error(sample_id=sample_id, error=f"Processing error: {e}")
-                results.append(error_result)
+            if not data.get("behavioral_report"):
+                logger.warning(f"No behavioral report for {sample_id}")
+                continue
+            
+            # Extract artifacts
+            result = extract_sample(
+                overview=data["overview"],
+                behavioral_report=data["behavioral_report"],
+                kernel_logs=data.get("kernel_logs"),
+            )
+            results.append(result)
+            processed += 1
+            
+            logger.debug(f"Extracted {len(result.get_all_artifacts())} artifacts from {sample_id}")
+            
+        except TriageAPIError as e:
+            logger.error(f"Failed to fetch {sample_id}: {e}")
+            error_result = ExtractionResult()
+            error_result.add_error(sample_id=sample_id, error=str(e))
+            results.append(error_result)
+        
+        except Exception as e:
+            logger.error(f"Failed to process {sample_id}: {e}")
+            error_result = ExtractionResult()
+            error_result.add_error(sample_id=sample_id, error=f"Processing error: {e}")
+            results.append(error_result)
+    
+    logger.info(f"Processed {processed} samples successfully")
     
     # Aggregate all results
     return aggregate_results(results, filter_config)
@@ -578,26 +562,31 @@ def run_live_extraction_pipeline(
     min_sample_count: int = 1,
     split_by_os: bool = True,
     generate_deception: bool = True,
+    use_private_cloud: bool = True,
 ) -> dict[str, Any]:
     """
     Run the full extraction pipeline with live API data.
     
+    Searches for samples with tag:evasion and extracts anti-analysis artifacts.
+    OS is inferred from file extensions and platform fields.
+    
     Args:
         output_dir: Directory for output files
         api_key: Triage API key
-        os_filter: List of OS types to include
+        os_filter: List of OS types to include (samples filtered by inferred OS)
         min_score: Minimum sample score
-        days: Look back period in days
-        max_samples: Maximum samples per OS
+        days: Look back period in days (for future date filtering)
+        max_samples: Maximum samples to process
         min_confidence: Minimum confidence threshold
         min_sample_count: Minimum sample count threshold
         split_by_os: Write per-OS JSON files
         generate_deception: Generate deception YAML configs
+        use_private_cloud: If True, use private.tria.ge; else use api.tria.ge
         
     Returns:
         Summary of extraction results
     """
-    logger.info("Starting live extraction pipeline...")
+    logger.info("Starting live extraction pipeline (searching for tag:evasion)...")
     
     # Configure filtering
     filter_config = FilterConfig(
@@ -613,6 +602,7 @@ def run_live_extraction_pipeline(
         days=days,
         max_samples=max_samples,
         filter_config=filter_config,
+        use_private_cloud=use_private_cloud,
     )
     
     # Write outputs

@@ -310,6 +310,7 @@ class UpdateService:
                 
                 # Process samples as they're found (shows incremental progress)
                 sample_idx = 0
+                skipped_already_processed = 0
                 for sample in sample_iterator:
                     sample_idx += 1
                     self.progress.current_sample = sample_idx
@@ -318,6 +319,12 @@ class UpdateService:
                     
                     sample_id = sample.get("id")
                     if not sample_id:
+                        continue
+                    
+                    # Skip samples we've already processed - saves API calls and time
+                    if app.database.is_sample_processed(sample_id):
+                        skipped_already_processed += 1
+                        logger.debug(f"Skipping already-processed sample: {sample_id}")
                         continue
                     
                     # Use the inferred_os from search results (already filtered)
@@ -424,6 +431,15 @@ class UpdateService:
 
                             total_artifacts += 1
                         
+                        # Mark sample as processed so we skip it in future updates
+                        app.database.mark_sample_processed(
+                            sample_id=sample_id,
+                            os_type=detected_os.value,
+                            artifacts_extracted=len(artifacts_for_os),
+                            score=score,
+                            sha256=sample_sha256,
+                        )
+                        
                         # Show new artifacts count (not total processed)
                         self.progress.artifacts_found = total_new
                         
@@ -433,6 +449,10 @@ class UpdateService:
                 
                 self.progress.os_completed = os_idx + 1
                 self._notify_progress()
+                
+                # Log summary for this OS type
+                if skipped_already_processed > 0:
+                    logger.info(f"{os_type}: Skipped {skipped_already_processed} already-processed samples")
             
             # Update complete
             self.last_update = datetime.now(timezone.utc)
@@ -472,9 +492,15 @@ class UpdateService:
             sample_sha1: SHA1 hash of the source sample
             sample_sha256: SHA256 hash of the source sample
         """
+        import hashlib
         from extractor.models.artifact import Artifact
         
-        artifact_id = f"art-{artifact.os.value}-{artifact.artifact_type.value}-{hash(artifact.match_criteria.value) & 0xFFFFFFFF:08x}"
+        # Generate deterministic artifact ID using SHA256 (same format as seeded artifacts)
+        # This ensures the same artifact value always produces the same ID,
+        # even across Python restarts (unlike hash() which is randomized)
+        hash_input = f"{artifact.os.value}-{artifact.artifact_type.value}-{artifact.match_criteria.value}"
+        hash_value = hashlib.sha256(hash_input.encode()).hexdigest()[:8]
+        artifact_id = f"art-{artifact.os.value}-{artifact.artifact_type.value}-{hash_value}"
         
         # Build Triage URL from sample ID (using private cloud)
         # Private cloud samples use private.tria.ge, public use tria.ge

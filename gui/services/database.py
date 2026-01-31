@@ -127,11 +127,25 @@ class ArtifactDatabase:
             )
         """)
         
+        # Processed samples tracking - prevents re-analyzing the same samples
+        # This saves API calls and processing time on subsequent updates
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS processed_samples (
+                sample_id TEXT PRIMARY KEY,
+                os_type TEXT NOT NULL,
+                processed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                artifacts_extracted INTEGER DEFAULT 0,
+                score INTEGER,
+                sha256 TEXT
+            )
+        """)
+        
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_artifacts_os ON artifacts(os)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_artifacts_category ON artifacts(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_artifacts_privilege ON artifacts(privilege_level)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_placements_status ON placements(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_samples_os ON processed_samples(os_type)")
         
         # Migrate existing databases - add new columns if missing
         self._migrate_schema(cursor)
@@ -634,5 +648,104 @@ class ArtifactDatabase:
         cursor.execute("DELETE FROM artifacts")
         cursor.execute("DELETE FROM settings")
         cursor.execute("DELETE FROM updates")
+        cursor.execute("DELETE FROM processed_samples")
         self.conn.commit()
         logger.info("All data cleared")
+    
+    # =========================================================================
+    # Processed Samples Tracking
+    # =========================================================================
+    
+    def is_sample_processed(self, sample_id: str) -> bool:
+        """
+        Check if a sample has already been processed.
+        
+        Args:
+            sample_id: Triage sample ID (e.g., "260128-abc123")
+            
+        Returns:
+            True if the sample has been processed before
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM processed_samples WHERE sample_id = ?",
+            (sample_id,)
+        )
+        result = cursor.fetchone() is not None
+        logger.debug(f"Sample {sample_id} already processed: {result}")
+        return result
+    
+    def mark_sample_processed(
+        self,
+        sample_id: str,
+        os_type: str,
+        artifacts_extracted: int = 0,
+        score: Optional[int] = None,
+        sha256: Optional[str] = None,
+    ) -> bool:
+        """
+        Mark a sample as processed to skip it in future updates.
+        
+        Args:
+            sample_id: Triage sample ID
+            os_type: Detected OS type (android, windows, linux, macos)
+            artifacts_extracted: Number of artifacts extracted from this sample
+            score: Sample malware score (0-10)
+            sha256: SHA256 hash of the sample
+            
+        Returns:
+            True if successfully marked
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_samples 
+                (sample_id, os_type, processed_at, artifacts_extracted, score, sha256)
+                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+            """, (sample_id, os_type, artifacts_extracted, score, sha256))
+            self.conn.commit()
+            logger.debug(f"Marked sample {sample_id} as processed ({artifacts_extracted} artifacts)")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark sample as processed: {e}")
+            return False
+    
+    def get_processed_sample_count(self, os_type: Optional[str] = None) -> int:
+        """
+        Get count of processed samples, optionally filtered by OS.
+        
+        Args:
+            os_type: Optional OS filter
+            
+        Returns:
+            Number of processed samples
+        """
+        cursor = self.conn.cursor()
+        if os_type:
+            cursor.execute(
+                "SELECT COUNT(*) FROM processed_samples WHERE os_type = ?",
+                (os_type,)
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) FROM processed_samples")
+        return cursor.fetchone()[0]
+    
+    def clear_processed_samples(self, os_type: Optional[str] = None):
+        """
+        Clear processed samples history to force re-analysis.
+        
+        Args:
+            os_type: If provided, only clear samples of this OS type.
+                    If None, clears all processed samples.
+        """
+        cursor = self.conn.cursor()
+        if os_type:
+            cursor.execute(
+                "DELETE FROM processed_samples WHERE os_type = ?",
+                (os_type,)
+            )
+            logger.info(f"Cleared processed samples for OS: {os_type}")
+        else:
+            cursor.execute("DELETE FROM processed_samples")
+            logger.info("Cleared all processed samples")
+        self.conn.commit()

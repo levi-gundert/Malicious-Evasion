@@ -54,7 +54,7 @@ class UpdateProgress:
                 return f"Fetching {self.current_os} ({self.current_sample}/{self.total_samples})..."
             return "Starting update..."
         elif self.status == "complete":
-            return f"Complete: {self.artifacts_found} artifacts found"
+            return f"Complete: {self.message}" if self.message else f"Complete: {self.artifacts_found} new artifacts"
         elif self.status == "error":
             return f"Error: {self.message}"
         return self.message or "Unknown"
@@ -424,7 +424,8 @@ class UpdateService:
 
                             total_artifacts += 1
                         
-                        self.progress.artifacts_found = total_artifacts
+                        # Show new artifacts count (not total processed)
+                        self.progress.artifacts_found = total_new
                         
                     except Exception as e:
                         logger.debug(f"Error processing {sample_id}: {e}")
@@ -438,7 +439,7 @@ class UpdateService:
             app.database.save_setting("last_update_time", self.last_update.isoformat())
             
             self.progress.status = "complete"
-            self.progress.artifacts_found = total_artifacts
+            self.progress.artifacts_found = total_new
             self.progress.message = f"{total_new} new, {total_updated} updated"
             self._notify_progress()
             

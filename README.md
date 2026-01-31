@@ -1,6 +1,6 @@
 # Malicious Evasion Artifact Placer
 
-A tool for extracting anti-analysis and evasion artifacts from malware behavioral reports and placing them on systems to test security tool detection capabilities.
+A tool for extracting anti-analysis and evasion artifacts from malware behavioral reports and placing them on systems to mimic sandboxes that cause malware to terminate.
 
 ![Dashboard Screenshot](docs/screenshots/dashboard.png)
 

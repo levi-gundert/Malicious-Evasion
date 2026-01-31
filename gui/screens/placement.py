@@ -7,26 +7,28 @@ Handles the placement wizard flow:
 3. Require explicit confirmation for each
 4. Trigger OS elevation when needed
 5. Log all placements for later removal
+
+Built with KivyMD Material Design components.
 """
 
 import logging
-from typing import List, Optional
+from typing import List
 
-from kivy.uix.screenmanager import Screen
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
+from kivymd.app import MDApp
+from kivymd.uix.screen import MDScreen
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.card import MDCard
+from kivymd.uix.label import MDLabel
+from kivymd.uix.button import MDRaisedButton, MDFlatButton
+from kivymd.uix.dialog import MDDialog
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.popup import Popup
-from kivy.graphics import Color, Rectangle, RoundedRectangle
-from kivy.app import App
+from kivy.metrics import dp
 from kivy.clock import Clock
 
 logger = logging.getLogger(__name__)
 
 
-class PlacementItemWidget(BoxLayout):
+class PlacementItemWidget(MDCard):
     """Widget showing a single artifact to be placed."""
     
     def __init__(self, artifact: dict, on_place=None, on_skip=None, **kwargs):
@@ -36,57 +38,56 @@ class PlacementItemWidget(BoxLayout):
         self.on_skip = on_skip
         self.orientation = "vertical"
         self.size_hint_y = None
-        self.height = 140
-        self.padding = 15
-        self.spacing = 8
+        self.height = dp(150)
+        self.padding = dp(16)
+        self.spacing = dp(10)
+        self.radius = [dp(12)]
         
-        # Determine privilege styling
+        # Determine styling based on privilege
         privilege = artifact.get("privilege_level", "user")
         if privilege == "admin":
-            bg_color = (0.3, 0.2, 0.15, 1)
-            badge_color = (0.8, 0.4, 0.2, 1)
+            bg_color = (0.15, 0.12, 0.08, 1)
+            badge_color = (0.984, 0.737, 0.016, 1)
             warning_text = "Requires Administrator privileges"
         elif privilege == "root":
-            bg_color = (0.3, 0.15, 0.15, 1)
-            badge_color = (0.8, 0.2, 0.2, 1)
+            bg_color = (0.15, 0.08, 0.08, 1)
+            badge_color = (0.918, 0.263, 0.208, 1)
             warning_text = "Requires Root access"
         else:
-            bg_color = (0.15, 0.25, 0.15, 1)
-            badge_color = (0.3, 0.6, 0.3, 1)
+            bg_color = (0.08, 0.15, 0.08, 1)
+            badge_color = (0.204, 0.659, 0.325, 1)
             warning_text = "No special privileges required"
         
-        # Background
-        with self.canvas.before:
-            Color(*bg_color)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[10])
-        self.bind(pos=self._update_rect, size=self._update_rect)
+        self.md_bg_color = bg_color
         
         # Header with type badge
-        header = BoxLayout(size_hint_y=None, height=30, spacing=10)
+        header = MDBoxLayout(size_hint_y=None, height=dp(30), spacing=dp(10))
         
-        # Type label
         type_text = f"{artifact.get('artifact_type', 'unknown').upper()}"
-        type_label = Label(
+        type_label = MDLabel(
             text=type_text,
-            font_size="12sp",
+            font_style="Caption",
             bold=True,
-            halign="left",
-            valign="middle",
-            color=(0.8, 0.8, 0.8, 1),
+            theme_text_color="Custom",
+            text_color=(0.8, 0.8, 0.8, 1),
         )
-        type_label.bind(size=type_label.setter("text_size"))
         header.add_widget(type_label)
         
         # Privilege badge
-        badge = BoxLayout(size_hint=(None, None), size=(70, 24))
-        with badge.canvas.before:
-            Color(*badge_color)
-            self.badge_rect = RoundedRectangle(pos=badge.pos, size=badge.size, radius=[4])
-        badge.bind(
-            pos=lambda w, p: setattr(self.badge_rect, "pos", p),
-            size=lambda w, s: setattr(self.badge_rect, "size", s),
+        badge = MDCard(
+            size_hint=(None, None),
+            size=(dp(70), dp(24)),
+            radius=[dp(4)],
+            md_bg_color=badge_color,
         )
-        badge_label = Label(text=privilege.upper(), font_size="10sp", bold=True)
+        badge_label = MDLabel(
+            text=privilege.upper(),
+            font_style="Caption",
+            bold=True,
+            halign="center",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
+        )
         badge.add_widget(badge_label)
         header.add_widget(badge)
         
@@ -94,50 +95,51 @@ class PlacementItemWidget(BoxLayout):
         
         # Value (the actual artifact path/key)
         value = artifact.get("value", "Unknown")
-        value_label = Label(
-            text=value,
-            font_size="14sp",
+        display_value = value if len(value) < 80 else value[:77] + "..."
+        value_label = MDLabel(
+            text=display_value,
+            font_style="Body1",
             bold=True,
-            halign="left",
-            valign="middle",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
+            size_hint_y=None,
+            height=dp(24),
         )
-        value_label.bind(size=value_label.setter("text_size"))
         self.add_widget(value_label)
         
         # Warning/info text
-        warning_label = Label(
+        warning_color = (0.7, 0.7, 0.5, 1) if privilege != "user" else (0.5, 0.7, 0.5, 1)
+        warning_label = MDLabel(
             text=warning_text,
-            font_size="12sp",
-            halign="left",
-            valign="middle",
-            color=(0.7, 0.7, 0.5, 1) if privilege != "user" else (0.5, 0.7, 0.5, 1),
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=warning_color,
+            size_hint_y=None,
+            height=dp(20),
         )
-        warning_label.bind(size=warning_label.setter("text_size"))
         self.add_widget(warning_label)
         
         # Action buttons
-        buttons = BoxLayout(size_hint_y=None, height=35, spacing=10)
+        buttons = MDBoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
         
-        place_btn = Button(
+        place_btn = MDRaisedButton(
             text="Place This Artifact",
-            font_size="13sp",
+            size_hint_x=0.7,
+            md_bg_color=(0.102, 0.451, 0.91, 1),
             on_release=lambda x: self._do_place(),
         )
         buttons.add_widget(place_btn)
         
-        skip_btn = Button(
+        skip_btn = MDFlatButton(
             text="Skip",
-            font_size="13sp",
             size_hint_x=0.3,
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             on_release=lambda x: self._do_skip(),
         )
         buttons.add_widget(skip_btn)
         
         self.add_widget(buttons)
-    
-    def _update_rect(self, *args):
-        self.rect.pos = self.pos
-        self.rect.size = self.size
     
     def _do_place(self):
         """Handle place button click."""
@@ -150,122 +152,131 @@ class PlacementItemWidget(BoxLayout):
             self.on_skip(self.artifact)
 
 
-class PlacementScreen(Screen):
-    """Artifact placement wizard screen."""
+class PlacementScreen(MDScreen):
+    """Artifact placement wizard screen with KivyMD styling."""
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.artifacts_to_place = []
         self.placed_artifacts = []
         self.skipped_artifacts = []
+        self._privilege_dialog = None
         self._build_ui()
     
     def _build_ui(self):
-        """Build the placement UI."""
-        main_layout = BoxLayout(orientation="vertical", padding=15, spacing=10)
+        """Build the placement UI with KivyMD components."""
+        main_layout = MDBoxLayout(
+            orientation="vertical",
+            padding=[dp(24), dp(20), dp(24), dp(20)],
+            spacing=dp(16),
+            md_bg_color=(0.039, 0.086, 0.157, 1),
+        )
         
-        # Header
-        header = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        # ===== HEADER =====
+        header = MDBoxLayout(
+            size_hint_y=None,
+            height=dp(50),
+            spacing=dp(10),
+        )
         
-        back_btn = Button(
+        back_btn = MDRaisedButton(
             text="< Cancel",
             size_hint=(None, None),
-            size=(100, 40),
+            size=(dp(110), dp(44)),
+            md_bg_color=(0.918, 0.263, 0.208, 1),
             on_release=lambda x: self._cancel(),
         )
         header.add_widget(back_btn)
         
-        title = Label(
+        title = MDLabel(
             text="Place Artifacts",
-            font_size="24sp",
-            bold=True,
-            halign="left",
-            valign="middle",
+            font_style="H5",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
         )
-        title.bind(size=title.setter("text_size"))
         header.add_widget(title)
         
         main_layout.add_widget(header)
         
-        # Progress/status
-        self.status_label = Label(
+        # ===== STATUS =====
+        self.status_label = MDLabel(
             text="Select artifacts from Browse to place.",
-            font_size="14sp",
-            halign="left",
-            valign="middle",
+            font_style="Body1",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             size_hint_y=None,
-            height=30,
+            height=dp(28),
         )
-        self.status_label.bind(size=self.status_label.setter("text_size"))
         main_layout.add_widget(self.status_label)
         
-        # Warning banner
-        warning_box = BoxLayout(size_hint_y=None, height=50, padding=10)
-        with warning_box.canvas.before:
-            Color(0.4, 0.3, 0.1, 1)
-            self.warning_rect = Rectangle(pos=warning_box.pos, size=warning_box.size)
-        warning_box.bind(
-            pos=lambda w, p: setattr(self.warning_rect, "pos", p),
-            size=lambda w, s: setattr(self.warning_rect, "size", s),
-        )
-        
-        warning_label = Label(
-            text="Review each artifact carefully. Admin/Root artifacts will prompt for elevation.",
-            font_size="13sp",
-            halign="center",
-            valign="middle",
-        )
-        warning_label.bind(size=warning_label.setter("text_size"))
-        warning_box.add_widget(warning_label)
-        main_layout.add_widget(warning_box)
-        
-        # Artifacts list (scrollable)
-        scroll = ScrollView(size_hint=(1, 1))
-        self.items_layout = BoxLayout(
-            orientation="vertical",
-            spacing=10,
+        # ===== WARNING BANNER =====
+        warning_card = MDCard(
             size_hint_y=None,
-            padding=[0, 0, 10, 0],
+            height=dp(50),
+            radius=[dp(8)],
+            md_bg_color=(0.4, 0.3, 0.1, 1),
+        )
+        warning_label = MDLabel(
+            text="Review each artifact carefully. Admin/Root artifacts will prompt for elevation.",
+            font_style="Caption",
+            halign="center",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
+        )
+        warning_card.add_widget(warning_label)
+        main_layout.add_widget(warning_card)
+        
+        # ===== ARTIFACTS LIST =====
+        scroll = ScrollView(size_hint=(1, 1))
+        self.items_layout = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(12),
+            size_hint_y=None,
+            padding=[0, 0, dp(10), 0],
+            adaptive_height=True,
         )
         self.items_layout.bind(minimum_height=self.items_layout.setter("height"))
         scroll.add_widget(self.items_layout)
         main_layout.add_widget(scroll)
         
-        # Footer with summary
-        footer = BoxLayout(size_hint_y=None, height=60, spacing=10, padding=10)
-        with footer.canvas.before:
-            Color(0.12, 0.12, 0.12, 1)
-            self.footer_rect = Rectangle(pos=footer.pos, size=footer.size)
-        footer.bind(
-            pos=lambda w, p: setattr(self.footer_rect, "pos", p),
-            size=lambda w, s: setattr(self.footer_rect, "size", s),
+        # ===== FOOTER =====
+        footer = MDCard(
+            size_hint_y=None,
+            height=dp(60),
+            radius=[dp(8)],
+            md_bg_color=(0.071, 0.129, 0.212, 1),
+            padding=dp(10),
         )
         
-        self.summary_label = Label(
+        footer_content = MDBoxLayout(spacing=dp(10))
+        
+        self.summary_label = MDLabel(
             text="Placed: 0 | Skipped: 0 | Remaining: 0",
-            font_size="14sp",
-            halign="left",
-            valign="middle",
+            font_style="Body2",
+            theme_text_color="Custom",
+            text_color=(0.91, 0.918, 0.929, 1),
         )
-        self.summary_label.bind(size=self.summary_label.setter("text_size"))
-        footer.add_widget(self.summary_label)
+        footer_content.add_widget(self.summary_label)
         
-        place_all_btn = Button(
+        place_all_btn = MDRaisedButton(
             text="Place All User-Space",
             size_hint=(None, None),
-            size=(160, 40),
+            size=(dp(180), dp(40)),
+            md_bg_color=(0.102, 0.451, 0.91, 1),
             on_release=lambda x: self._place_all_user(),
         )
-        footer.add_widget(place_all_btn)
+        footer_content.add_widget(place_all_btn)
         
-        done_btn = Button(
+        done_btn = MDRaisedButton(
             text="Done",
             size_hint=(None, None),
-            size=(100, 40),
+            size=(dp(100), dp(40)),
+            md_bg_color=(0.204, 0.659, 0.325, 1),
             on_release=lambda x: self._finish(),
         )
-        footer.add_widget(done_btn)
+        footer_content.add_widget(done_btn)
         
+        footer.add_widget(footer_content)
         main_layout.add_widget(footer)
         
         self.add_widget(main_layout)
@@ -287,12 +298,14 @@ class PlacementScreen(Screen):
         self.items_layout.clear_widgets()
         
         if not self.artifacts_to_place:
-            empty_label = Label(
+            empty_label = MDLabel(
                 text="No artifacts to place. Go to Browse to select artifacts.",
-                font_size="14sp",
-                color=(0.6, 0.6, 0.6, 1),
+                font_style="Body2",
+                theme_text_color="Custom",
+                text_color=(0.604, 0.627, 0.651, 1),
                 size_hint_y=None,
-                height=40,
+                height=dp(40),
+                halign="center",
             )
             self.items_layout.add_widget(empty_label)
             self.status_label.text = "No artifacts selected."
@@ -321,67 +334,51 @@ class PlacementScreen(Screen):
         privilege = artifact.get("privilege_level", "user")
         
         if privilege in ("admin", "root"):
-            # Show confirmation popup for privileged placement
             self._show_privilege_confirmation(artifact)
         else:
-            # Direct placement for user-space
             self._do_place(artifact)
     
     def _show_privilege_confirmation(self, artifact: dict):
-        """Show confirmation popup for privileged artifact."""
+        """Show confirmation dialog for privileged artifact."""
         privilege = artifact.get("privilege_level", "admin")
         value = artifact.get("value", "Unknown")
+        display_value = value if len(value) < 60 else value[:57] + "..."
         
-        content = BoxLayout(orientation="vertical", spacing=10, padding=10)
-        
-        warning = Label(
-            text=f"This artifact requires {privilege.upper()} privileges.\n\n"
-                 f"Value: {value}\n\n"
-                 f"The system will prompt you for elevation.\n"
-                 f"Do you want to proceed?",
-            font_size="14sp",
-            halign="center",
-            valign="middle",
-        )
-        warning.bind(size=warning.setter("text_size"))
-        content.add_widget(warning)
-        
-        buttons = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        
-        popup = Popup(
+        self._privilege_dialog = MDDialog(
             title="Privilege Required",
-            content=content,
-            size_hint=(0.8, 0.5),
-            auto_dismiss=False,
+            text=(
+                f"This artifact requires {privilege.upper()} privileges.\n\n"
+                f"Value: {display_value}\n\n"
+                f"The system will prompt you for elevation.\n"
+                f"Do you want to proceed?"
+            ),
+            buttons=[
+                MDFlatButton(
+                    text="Cancel",
+                    on_release=lambda x: self._privilege_dialog.dismiss(),
+                ),
+                MDRaisedButton(
+                    text="Proceed",
+                    md_bg_color=(0.984, 0.737, 0.016, 1),
+                    text_color=(0, 0, 0, 1),
+                    on_release=lambda x: self._on_privilege_confirmed(artifact),
+                ),
+            ],
         )
-        
-        cancel_btn = Button(
-            text="Cancel",
-            on_release=lambda x: popup.dismiss(),
-        )
-        buttons.add_widget(cancel_btn)
-        
-        proceed_btn = Button(
-            text="Proceed",
-            on_release=lambda x: self._on_privilege_confirmed(artifact, popup),
-        )
-        buttons.add_widget(proceed_btn)
-        
-        content.add_widget(buttons)
-        popup.open()
+        self._privilege_dialog.open()
     
-    def _on_privilege_confirmed(self, artifact: dict, popup: Popup):
+    def _on_privilege_confirmed(self, artifact: dict):
         """Handle privilege confirmation."""
-        popup.dismiss()
+        if self._privilege_dialog:
+            self._privilege_dialog.dismiss()
         self._do_place(artifact, with_elevation=True)
     
     def _do_place(self, artifact: dict, with_elevation: bool = False):
         """Actually place the artifact."""
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if not app:
             return
         
-        # Import placement engine
         from gui.services.placement_engine import PlacementEngine
         
         engine = PlacementEngine(app.current_os)
@@ -394,12 +391,10 @@ class PlacementScreen(Screen):
                 self.placed_artifacts.append(artifact)
                 self.artifacts_to_place.remove(artifact)
                 
-                # Log placement for undo
                 if app.database:
                     app.database.log_placement(artifact)
             else:
                 logger.warning(f"Failed to place artifact: {artifact.get('value')}")
-                # Show error but don't remove from list
                 
         except Exception as e:
             logger.error(f"Error placing artifact: {e}")
@@ -414,7 +409,7 @@ class PlacementScreen(Screen):
     
     def _place_all_user(self):
         """Place all user-space artifacts at once."""
-        user_artifacts = [a for a in self.artifacts_to_place 
+        user_artifacts = [a for a in self.artifacts_to_place
                          if a.get("privilege_level", "user") == "user"]
         
         for artifact in user_artifacts:
@@ -426,7 +421,7 @@ class PlacementScreen(Screen):
         self.placed_artifacts = []
         self.skipped_artifacts = []
         
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if app:
             app.navigate_to("browse", direction="right")
     
@@ -439,6 +434,6 @@ class PlacementScreen(Screen):
         self.placed_artifacts = []
         self.skipped_artifacts = []
         
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if app:
             app.go_back()

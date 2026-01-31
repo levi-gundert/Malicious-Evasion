@@ -1,15 +1,15 @@
 """
-Main Kivy Application class.
+Main KivyMD Application class.
 
 Handles screen management, navigation, and app lifecycle.
+Uses Material Design components for a polished, professional UI.
 """
 
 import logging
 from pathlib import Path
 
-from kivy.app import App
-from kivy.lang import Builder
-from kivy.uix.screenmanager import ScreenManager, SlideTransition
+from kivymd.app import MDApp
+from kivymd.uix.screenmanager import MDScreenManager
 from kivy.core.window import Window
 from kivy.utils import platform
 
@@ -21,11 +21,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class EvasionArtifactApp(App):
+class EvasionArtifactApp(MDApp):
     """
     Main application class for the Malicious Evasion Artifact Placement GUI.
     
-    Manages screens, navigation, and core services.
+    Uses KivyMD for Material Design components and theming.
     Theme inspired by Recorded Future's brand identity.
     """
     
@@ -43,7 +43,6 @@ class EvasionArtifactApp(App):
     
     def _detect_os(self) -> str:
         """Detect the current operating system."""
-        # Kivy's platform detection
         if platform == "android":
             return "android"
         elif platform == "ios":
@@ -58,31 +57,35 @@ class EvasionArtifactApp(App):
             return "unknown"
     
     def build(self):
-        """Build the application UI."""
-        # Load global styles first so all buttons/inputs use modern theme
-        styles_path = Path(__file__).parent / "assets" / "styles.kv"
-        if styles_path.exists():
-            Builder.load_file(str(styles_path))
-            logger.debug("Loaded styles.kv")
+        """Build the application UI with KivyMD theming."""
+        # Configure theme - Recorded Future inspired dark theme
+        self.theme_cls.theme_style = "Dark"
+        self.theme_cls.primary_palette = "Blue"
+        self.theme_cls.primary_hue = "600"
+        self.theme_cls.accent_palette = "Cyan"
+        self.theme_cls.accent_hue = "400"
+        
+        # Custom colors matching Recorded Future brand
+        # Primary: #1A73E8, Accent: #00D4FF
+        self.theme_cls.material_style = "M3"
+        
+        # Set window properties for desktop
+        if self.current_os in ("windows", "linux", "macos"):
+            Window.size = (1100, 800)
+            Window.minimum_width = 900
+            Window.minimum_height = 700
+        
+        # Set dark background
+        Window.clearcolor = (0.039, 0.086, 0.157, 1)  # #0A1628
         
         # Import screens here to avoid circular imports
         from gui.screens.dashboard import DashboardScreen
         from gui.screens.browse import BrowseScreen
         from gui.screens.placement import PlacementScreen
         from gui.screens.settings import SettingsScreen
-        from gui.theme import Colors
-        
-        # Set window properties for desktop
-        if self.current_os in ("windows", "linux", "macos"):
-            Window.size = (1024, 768)
-            Window.minimum_width = 800
-            Window.minimum_height = 600
-        
-        # Apply Recorded Future inspired dark theme
-        Window.clearcolor = Colors.BG_DARK
         
         # Create screen manager
-        self.screen_manager = ScreenManager(transition=SlideTransition())
+        self.screen_manager = MDScreenManager()
         
         # Add screens
         self.screen_manager.add_widget(DashboardScreen(name="dashboard"))
@@ -93,7 +96,7 @@ class EvasionArtifactApp(App):
         # Start on dashboard
         self.screen_manager.current = "dashboard"
         
-        logger.info("Application UI built successfully")
+        logger.info("Application UI built successfully with KivyMD")
         
         return self.screen_manager
     
@@ -106,7 +109,6 @@ class EvasionArtifactApp(App):
             direction: Slide direction ('left' or 'right')
         """
         if self.screen_manager:
-            self.screen_manager.transition.direction = direction
             self.screen_manager.current = screen_name
             logger.debug(f"Navigated to: {screen_name}")
     
@@ -151,7 +153,6 @@ class EvasionArtifactApp(App):
     def _on_update_complete(self):
         """Handle update completion."""
         logger.info("Update completed successfully")
-        # Refresh dashboard if visible
         if self.screen_manager and self.screen_manager.current == "dashboard":
             dashboard = self.screen_manager.get_screen("dashboard")
             dashboard._refresh_stats()
@@ -163,7 +164,6 @@ class EvasionArtifactApp(App):
     def _on_new_artifacts(self, count: int):
         """Handle new artifacts notification."""
         logger.info(f"Found {count} new artifacts")
-        # Could show a notification here using plyer
     
     def on_stop(self):
         """Called when the application stops."""
@@ -181,5 +181,4 @@ class EvasionArtifactApp(App):
             from android.storage import app_storage_path
             return Path(app_storage_path())
         else:
-            # Desktop: use user data dir
             return Path(self.user_data_dir)

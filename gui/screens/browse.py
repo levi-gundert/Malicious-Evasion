@@ -8,37 +8,38 @@ Displays artifacts in a filterable list with:
 - Search by value
 - Sort by confidence
 
-Theme: Recorded Future inspired (Electric Blue + Dark)
+Built with KivyMD Material Design components.
 """
 
 import logging
 from typing import List, Optional
 
-from kivy.uix.screenmanager import Screen
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
+from kivymd.app import MDApp
+from kivymd.uix.screen import MDScreen
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.gridlayout import MDGridLayout
+from kivymd.uix.card import MDCard
+from kivymd.uix.label import MDLabel
+from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
+from kivymd.uix.selectioncontrol import MDCheckbox
+from kivymd.uix.textfield import MDTextField
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
-from kivy.uix.checkbox import CheckBox
-from kivy.graphics import Color, Rectangle, RoundedRectangle
-from kivy.app import App
+from kivy.metrics import dp
 from kivy.clock import Clock
 
 logger = logging.getLogger(__name__)
 
 
-class ArtifactCard(BoxLayout):
+class ArtifactCard(MDCard):
     """
     Card widget displaying an artifact's details.
     
     Shows:
-    - Artifact value (file path, registry key, etc.) - WHERE it will be placed
+    - Artifact value (file path, registry key, etc.)
     - Category and type
-    - Evasion purpose - WHY this artifact is used
-    - Source sample SHA1 and Triage link
+    - Evasion purpose
+    - Source sample info
     - Privilege requirement badge
     - Confidence score
     - Select checkbox
@@ -50,39 +51,31 @@ class ArtifactCard(BoxLayout):
         self.on_select_callback = on_select
         self.orientation = "horizontal"
         self.size_hint_y = None
-        self.height = 150  # Taller to fit more info
-        self.padding = [16, 12, 16, 12]
-        self.spacing = 16
+        self.height = dp(140)
+        self.padding = dp(16)
+        self.spacing = dp(16)
+        self.radius = [dp(12)]
+        self.md_bg_color = (0.071, 0.129, 0.212, 1)  # Navy surface
         
         # Determine badge color based on privilege
         privilege = artifact.get("privilege_level", "user")
         if privilege == "admin":
-            badge_color = (0.984, 0.737, 0.016, 1)  # Warning yellow
+            badge_color = (0.984, 0.737, 0.016, 1)  # Yellow
         elif privilege == "root":
-            badge_color = (0.918, 0.263, 0.208, 1)  # Error red
+            badge_color = (0.918, 0.263, 0.208, 1)  # Red
         else:
-            badge_color = (0.204, 0.659, 0.325, 1)  # Success green
-        
-        # Card background
-        with self.canvas.before:
-            # Fill
-            Color(0.071, 0.129, 0.212, 1)  # Navy surface
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[8])
-            # Border
-            Color(0.118, 0.227, 0.373, 1)
-            self.border_rect = RoundedRectangle(
-                pos=self.pos,
-                size=self.size,
-                radius=[8]
-            )
-        self.bind(pos=self._update_rect, size=self._update_rect)
+            badge_color = (0.204, 0.659, 0.325, 1)  # Green
         
         # Checkbox for selection
-        checkbox_container = BoxLayout(size_hint=(None, 1), width=40)
-        self.checkbox = CheckBox(
+        checkbox_container = MDBoxLayout(
+            size_hint=(None, 1),
+            width=dp(40),
+        )
+        self.checkbox = MDCheckbox(
             size_hint=(None, None),
-            size=(40, 40),
+            size=(dp(40), dp(40)),
             pos_hint={"center_y": 0.5},
+            color_active=(0.102, 0.451, 0.91, 1),
         )
         if on_select:
             self.checkbox.bind(active=lambda cb, val: on_select(artifact, val))
@@ -90,61 +83,52 @@ class ArtifactCard(BoxLayout):
         self.add_widget(checkbox_container)
         
         # Main content
-        content = BoxLayout(orientation="vertical", spacing=4)
+        content = MDBoxLayout(orientation="vertical", spacing=dp(4))
         
-        # Row 1: Value (file path, registry key, etc.) - WHERE it will be placed
+        # Row 1: Value (file path, registry key, etc.)
         value = artifact.get("value", "Unknown")
-        # Truncate long values
-        display_value = value if len(value) < 80 else value[:77] + "..."
-        value_label = Label(
+        display_value = value if len(value) < 70 else value[:67] + "..."
+        value_label = MDLabel(
             text=f"[b]Placement:[/b] {display_value}",
             markup=True,
-            font_size="13sp",
-            halign="left",
-            valign="middle",
-            color=(1, 1, 1, 1),  # White
+            font_style="Body1",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
             size_hint_y=0.22,
         )
-        value_label.bind(size=value_label.setter("text_size"))
         content.add_widget(value_label)
         
         # Row 2: Type and category
         artifact_type = artifact.get("artifact_type", "unknown")
         category = artifact.get("category", "unknown")
         os_type = artifact.get("os", "unknown")
-        type_text = f"{os_type.upper()} • {artifact_type} • {category}"
-        type_label = Label(
+        type_text = f"{os_type.upper()} | {artifact_type} | {category}"
+        type_label = MDLabel(
             text=type_text,
-            font_size="11sp",
-            halign="left",
-            valign="middle",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             size_hint_y=0.16,
         )
-        type_label.bind(size=type_label.setter("text_size"))
         content.add_widget(type_label)
         
-        # Row 3: Evasion purpose - WHY
+        # Row 3: Evasion purpose
         evasion_purpose = artifact.get("evasion_purpose", "")
         description = artifact.get("description", "")
         purpose_display = evasion_purpose or description or "Evasion technique"
-        # Format purpose nicely
         purpose_formatted = purpose_display.replace("_", " ").title()
-        purpose_label = Label(
+        purpose_label = MDLabel(
             text=f"[b]Purpose:[/b] {purpose_formatted}",
             markup=True,
-            font_size="11sp",
-            halign="left",
-            valign="middle",
-            color=(0, 0.831, 1, 1),  # Cyan accent
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0, 0.831, 1, 1),  # Cyan
             size_hint_y=0.18,
         )
-        purpose_label.bind(size=purpose_label.setter("text_size"))
         content.add_widget(purpose_label)
         
-        # Row 4: Source sample info (SHA1 + Triage link)
+        # Row 4: Source sample info
         source_sha1 = artifact.get("source_sha1", "")
-        triage_url = artifact.get("triage_url", "")
         sample_id = artifact.get("source_sample_id", "")
         
         if source_sha1:
@@ -155,15 +139,13 @@ class ArtifactCard(BoxLayout):
         else:
             source_text = "Source: Unknown"
         
-        source_label = Label(
+        source_label = MDLabel(
             text=source_text,
-            font_size="10sp",
-            halign="left",
-            valign="middle",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             size_hint_y=0.16,
         )
-        source_label.bind(size=source_label.setter("text_size"))
         content.add_widget(source_label)
         
         # Row 5: Confidence and sample count
@@ -173,64 +155,60 @@ class ArtifactCard(BoxLayout):
             conf_text = f"Confidence: {confidence:.0%} | Seen in {sample_count} sample(s)"
         else:
             conf_text = f"Confidence: {confidence} | Seen in {sample_count} sample(s)"
-        conf_label = Label(
+        conf_label = MDLabel(
             text=conf_text,
-            font_size="10sp",
-            halign="left",
-            valign="middle",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             size_hint_y=0.14,
         )
-        conf_label.bind(size=conf_label.setter("text_size"))
         content.add_widget(conf_label)
-        
-        # Store triage URL for potential future click handling
-        self.triage_url = triage_url
         
         self.add_widget(content)
         
         # Right side: Badge + View button
-        right_container = BoxLayout(orientation="vertical", size_hint=(None, 1), width=90, spacing=8)
+        right_container = MDBoxLayout(
+            orientation="vertical",
+            size_hint=(None, 1),
+            width=dp(90),
+            spacing=dp(8),
+        )
         
         # Privilege badge
-        badge_container = BoxLayout(size_hint_y=0.4, padding=[0, 8, 0, 0])
-        badge_layout = BoxLayout(size_hint=(1, None), height=26)
-        
-        with badge_layout.canvas.before:
-            Color(*badge_color)
-            self.badge_rect = RoundedRectangle(pos=badge_layout.pos, size=badge_layout.size, radius=[4])
-        badge_layout.bind(
-            pos=lambda w, p: setattr(self.badge_rect, "pos", p),
-            size=lambda w, s: setattr(self.badge_rect, "size", s),
+        badge = MDCard(
+            size_hint=(1, None),
+            height=dp(28),
+            radius=[dp(4)],
+            md_bg_color=badge_color,
         )
-        
-        badge_text = privilege.upper()
-        badge_label = Label(
-            text=badge_text,
-            font_size="10sp",
+        badge_label = MDLabel(
+            text=privilege.upper(),
+            font_style="Caption",
             bold=True,
-            color=(1, 1, 1, 1),
+            halign="center",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
         )
-        badge_layout.add_widget(badge_label)
-        badge_container.add_widget(badge_layout)
-        right_container.add_widget(badge_container)
+        badge.add_widget(badge_label)
+        right_container.add_widget(badge)
         
-        # View in Triage button (if URL available)
+        # View in Triage button
+        triage_url = artifact.get("triage_url", "")
         if triage_url:
-            view_btn = Button(
+            view_btn = MDFlatButton(
                 text="View",
-                font_size="11sp",
-                size_hint=(1, 0.35),
+                size_hint=(1, None),
+                height=dp(36),
+                theme_text_color="Custom",
+                text_color=(0, 0.831, 1, 1),
                 on_release=lambda x: self._open_triage(),
             )
             right_container.add_widget(view_btn)
-        else:
-            # Spacer
-            right_container.add_widget(BoxLayout(size_hint_y=0.35))
         
-        # Bottom spacer
-        right_container.add_widget(BoxLayout(size_hint_y=0.25))
+        # Spacer
+        right_container.add_widget(MDBoxLayout())
         
+        self.triage_url = triage_url
         self.add_widget(right_container)
     
     def _open_triage(self):
@@ -239,16 +217,10 @@ class ArtifactCard(BoxLayout):
         if self.triage_url:
             logger.info(f"Opening Triage URL: {self.triage_url}")
             webbrowser.open(self.triage_url)
-    
-    def _update_rect(self, *args):
-        self.rect.pos = self.pos
-        self.rect.size = self.size
-        self.border_rect.pos = self.pos
-        self.border_rect.size = self.size
 
 
-class BrowseScreen(Screen):
-    """Browse and filter artifacts screen with premium styling."""
+class BrowseScreen(MDScreen):
+    """Browse and filter artifacts screen with KivyMD styling."""
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -262,79 +234,70 @@ class BrowseScreen(Screen):
         self._build_ui()
     
     def _build_ui(self):
-        """Build the browse UI with Recorded Future theme."""
-        main_layout = BoxLayout(orientation="vertical", padding=[24, 20, 24, 20], spacing=16)
+        """Build the browse UI with KivyMD components."""
+        main_layout = MDBoxLayout(
+            orientation="vertical",
+            padding=[dp(24), dp(20), dp(24), dp(20)],
+            spacing=dp(16),
+            md_bg_color=(0.039, 0.086, 0.157, 1),
+        )
         
-        # =====================================================================
-        # Header with back button and title
-        # =====================================================================
-        header = BoxLayout(size_hint_y=None, height=50, spacing=16)
+        # ===== HEADER =====
+        header = MDBoxLayout(
+            size_hint_y=None,
+            height=dp(50),
+            spacing=dp(16),
+        )
         
-        back_btn = Button(
+        back_btn = MDRaisedButton(
             text="< Back",
             size_hint=(None, None),
-            size=(100, 44),
-            font_size="14sp",
+            size=(dp(100), dp(44)),
+            md_bg_color=(0.102, 0.451, 0.91, 1),
             on_release=lambda x: self._go_back(),
         )
         header.add_widget(back_btn)
         
-        title = Label(
+        title = MDLabel(
             text="Browse Artifacts",
-            font_size="24sp",
-            bold=True,
-            halign="left",
-            valign="middle",
-            color=(1, 1, 1, 1),  # White
+            font_style="H5",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
         )
-        title.bind(size=title.setter("text_size"))
         header.add_widget(title)
         
-        # Place selected button
-        self.place_btn = Button(
+        self.place_btn = MDRaisedButton(
             text="Place Selected (0)",
             size_hint=(None, None),
-            size=(160, 44),
-            font_size="14sp",
+            size=(dp(180), dp(44)),
+            md_bg_color=(0.204, 0.659, 0.325, 1),
             on_release=lambda x: self._place_selected(),
         )
-        # Initially disabled styling
         self.place_btn.disabled = True
         header.add_widget(self.place_btn)
         
         main_layout.add_widget(header)
         
-        # =====================================================================
-        # Filter row with proper spacing
-        # =====================================================================
-        filter_container = BoxLayout(
-            size_hint_y=None, 
-            height=60, 
-            padding=[16, 8, 16, 8],
-            spacing=12,
-        )
-        
-        # Background for filter bar
-        with filter_container.canvas.before:
-            Color(0.071, 0.129, 0.212, 1)  # Navy surface
-            self.filter_bg = RoundedRectangle(
-                pos=filter_container.pos,
-                size=filter_container.size,
-                radius=[8]
-            )
-        filter_container.bind(
-            pos=lambda w, p: setattr(self.filter_bg, "pos", p),
-            size=lambda w, s: setattr(self.filter_bg, "size", s),
+        # ===== FILTER ROW =====
+        filter_card = MDCard(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(60),
+            padding=dp(16),
+            spacing=dp(12),
+            radius=[dp(12)],
+            md_bg_color=(0.071, 0.129, 0.212, 1),
         )
         
         # OS filter
-        os_layout = BoxLayout(size_hint_x=None, width=140, spacing=8)
-        os_label = Label(
-            text="OS:", 
-            size_hint=(None, 1), 
-            width=30,
-            font_size="13sp",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+        os_layout = MDBoxLayout(size_hint_x=None, width=dp(140), spacing=dp(8))
+        os_label = MDLabel(
+            text="OS:",
+            font_style="Caption",
+            size_hint=(None, 1),
+            width=dp(30),
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
         )
         os_layout.add_widget(os_label)
         
@@ -342,43 +305,49 @@ class BrowseScreen(Screen):
             text="All",
             values=["All", "Android", "Windows", "Linux", "macOS"],
             size_hint=(1, None),
-            height=40,
+            height=dp(40),
+            background_color=(0.118, 0.227, 0.373, 1),
+            color=(1, 1, 1, 1),
         )
         self.os_spinner.bind(text=self._on_filter_change)
         os_layout.add_widget(self.os_spinner)
-        filter_container.add_widget(os_layout)
+        filter_card.add_widget(os_layout)
         
         # Category filter
-        cat_layout = BoxLayout(size_hint_x=None, width=200, spacing=8)
-        cat_label = Label(
-            text="Category:", 
-            size_hint=(None, 1), 
-            width=65,
-            font_size="13sp",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+        cat_layout = MDBoxLayout(size_hint_x=None, width=dp(200), spacing=dp(8))
+        cat_label = MDLabel(
+            text="Category:",
+            font_style="Caption",
+            size_hint=(None, 1),
+            width=dp(65),
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
         )
         cat_layout.add_widget(cat_label)
         
         self.category_spinner = Spinner(
             text="All",
-            values=["All", "vm_files", "root_indicators", "sandbox_files", 
+            values=["All", "vm_files", "root_indicators", "sandbox_files",
                     "emulator_files", "hooking_frameworks", "analysis_tools",
                     "vm_registry", "vm_processes"],
             size_hint=(1, None),
-            height=40,
+            height=dp(40),
+            background_color=(0.118, 0.227, 0.373, 1),
+            color=(1, 1, 1, 1),
         )
         self.category_spinner.bind(text=self._on_filter_change)
         cat_layout.add_widget(self.category_spinner)
-        filter_container.add_widget(cat_layout)
+        filter_card.add_widget(cat_layout)
         
         # Privilege filter
-        priv_layout = BoxLayout(size_hint_x=None, width=150, spacing=8)
-        priv_label = Label(
-            text="Privilege:", 
-            size_hint=(None, 1), 
-            width=60,
-            font_size="13sp",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+        priv_layout = MDBoxLayout(size_hint_x=None, width=dp(150), spacing=dp(8))
+        priv_label = MDLabel(
+            text="Privilege:",
+            font_style="Caption",
+            size_hint=(None, 1),
+            width=dp(60),
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
         )
         priv_layout.add_widget(priv_label)
         
@@ -386,59 +355,57 @@ class BrowseScreen(Screen):
             text="All",
             values=["All", "User", "Admin", "Root"],
             size_hint=(1, None),
-            height=40,
+            height=dp(40),
+            background_color=(0.118, 0.227, 0.373, 1),
+            color=(1, 1, 1, 1),
         )
         self.privilege_spinner.bind(text=self._on_filter_change)
         priv_layout.add_widget(self.privilege_spinner)
-        filter_container.add_widget(priv_layout)
+        filter_card.add_widget(priv_layout)
         
-        # Search box (takes remaining space)
-        search_layout = BoxLayout(spacing=8)
-        search_label = Label(
-            text="Search:", 
-            size_hint=(None, 1), 
-            width=55,
-            font_size="13sp",
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+        # Search box
+        search_layout = MDBoxLayout(spacing=dp(8))
+        search_label = MDLabel(
+            text="Search:",
+            font_style="Caption",
+            size_hint=(None, 1),
+            width=dp(55),
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
         )
         search_layout.add_widget(search_label)
         
-        self.search_input = TextInput(
+        self.search_input = MDTextField(
             hint_text="Filter by value...",
-            multiline=False,
+            mode="fill",
             size_hint=(1, None),
-            height=40,
+            height=dp(40),
         )
         self.search_input.bind(text=self._on_search_change)
         search_layout.add_widget(self.search_input)
-        filter_container.add_widget(search_layout)
+        filter_card.add_widget(search_layout)
         
-        main_layout.add_widget(filter_container)
+        main_layout.add_widget(filter_card)
         
-        # =====================================================================
-        # Results count
-        # =====================================================================
-        self.results_label = Label(
+        # ===== RESULTS COUNT =====
+        self.results_label = MDLabel(
             text="Showing 0 artifacts",
-            font_size="13sp",
-            halign="left",
-            valign="middle",
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
             size_hint_y=None,
-            height=30,
-            color=(0.604, 0.627, 0.651, 1),  # Muted
+            height=dp(28),
         )
-        self.results_label.bind(size=self.results_label.setter("text_size"))
         main_layout.add_widget(self.results_label)
         
-        # =====================================================================
-        # Artifacts list (scrollable)
-        # =====================================================================
+        # ===== ARTIFACTS LIST =====
         scroll = ScrollView(size_hint=(1, 1))
-        self.artifacts_layout = BoxLayout(
+        self.artifacts_layout = MDBoxLayout(
             orientation="vertical",
-            spacing=10,
+            spacing=dp(10),
             size_hint_y=None,
-            padding=[0, 8, 8, 8],
+            padding=[0, dp(8), dp(8), dp(8)],
+            adaptive_height=True,
         )
         self.artifacts_layout.bind(minimum_height=self.artifacts_layout.setter("height"))
         scroll.add_widget(self.artifacts_layout)
@@ -450,8 +417,7 @@ class BrowseScreen(Screen):
         """Called when screen is displayed."""
         logger.debug("Entering browse screen")
         
-        # Auto-detect OS and set filter
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if app:
             os_map = {
                 "android": "Android",
@@ -459,11 +425,9 @@ class BrowseScreen(Screen):
                 "linux": "Linux",
                 "macos": "macOS",
             }
-            # If user ran an update for a single OS, default the filter to it
             if getattr(app, "last_update_os", None):
                 self.os_spinner.text = os_map.get(app.last_update_os, "All")
             else:
-                # Default to all
                 self.os_spinner.text = "All"
         
         self._refresh_artifacts()
@@ -474,7 +438,6 @@ class BrowseScreen(Screen):
     
     def _on_search_change(self, input_widget, text):
         """Handle search text change."""
-        # Debounce search
         Clock.unschedule(self._do_search)
         Clock.schedule_once(lambda dt: self._do_search(), 0.3)
     
@@ -484,20 +447,18 @@ class BrowseScreen(Screen):
     
     def _refresh_artifacts(self):
         """Refresh the artifacts list based on filters."""
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if not app or not app.database:
             logger.warning("No database available")
             return
         
-        # Build filter criteria
         os_filter = self.os_spinner.text.lower() if self.os_spinner.text != "All" else None
         cat_filter = self.category_spinner.text if self.category_spinner.text != "All" else None
         priv_filter = self.privilege_spinner.text.lower() if self.privilege_spinner.text != "All" else None
         search_text = self.search_input.text.strip()
         
-        logger.debug(f"Refreshing artifacts: os={os_filter}, cat={cat_filter}, priv={priv_filter}, search={search_text}")
+        logger.debug(f"Refreshing artifacts: os={os_filter}, cat={cat_filter}, priv={priv_filter}")
         
-        # Get filtered artifacts (higher limit so all OS types show)
         artifacts = app.database.get_artifacts(
             os_type=os_filter,
             category=cat_filter,
@@ -506,39 +467,36 @@ class BrowseScreen(Screen):
             limit=500,
         )
         
-        logger.debug(f"Got {len(artifacts)} artifacts from database (os_filter={os_filter})")
+        logger.debug(f"Got {len(artifacts)} artifacts from database")
         
-        # Clear current list
         self.artifacts_layout.clear_widgets()
         self.selected_artifacts = []
         self._update_place_button()
         
-        # Add artifact cards
         for artifact in artifacts:
             card = ArtifactCard(artifact, on_select=self._on_artifact_select)
             self.artifacts_layout.add_widget(card)
         
-        # Update results count
         self.results_label.text = f"Showing {len(artifacts)} artifacts"
         
         if not artifacts:
-            # Helpful message when filtered by OS (e.g. Windows) but no results
             if os_filter:
                 hint = (
                     f"No {os_filter.capitalize()} artifacts in database.\n"
-                    "Run 'Check for Updates' on the dashboard with that OS selected to fetch samples."
+                    "Run 'Check for Updates' on the dashboard with that OS selected."
                 )
             else:
-                hint = "No artifacts match the current filters.\nTry changing the filters or run 'Check for Updates'."
-            no_results = Label(
+                hint = "No artifacts match the current filters.\nTry changing filters or run 'Check for Updates'."
+            
+            no_results = MDLabel(
                 text=hint,
-                font_size="14sp",
-                color=(0.604, 0.627, 0.651, 1),  # Muted
+                font_style="Body2",
+                theme_text_color="Custom",
+                text_color=(0.604, 0.627, 0.651, 1),
                 size_hint_y=None,
-                height=80,
+                height=dp(80),
                 halign="center",
             )
-            no_results.bind(size=no_results.setter("text_size"))
             self.artifacts_layout.add_widget(no_results)
     
     def _on_artifact_select(self, artifact: dict, selected: bool):
@@ -563,15 +521,14 @@ class BrowseScreen(Screen):
         if not self.selected_artifacts:
             return
         
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if app:
-            # Store selected artifacts for placement screen
             placement_screen = app.screen_manager.get_screen("placement")
             placement_screen.set_artifacts(self.selected_artifacts.copy())
             app.navigate_to("placement")
     
     def _go_back(self):
         """Navigate back to dashboard."""
-        app = App.get_running_app()
+        app = MDApp.get_running_app()
         if app:
             app.go_back()

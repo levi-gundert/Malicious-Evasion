@@ -3,8 +3,8 @@
 # Kivy - Cross-platform GUI framework
 kivy>=2.2.0
 
-# Optional: KivyMD for Material Design widgets
-# kivymd>=1.1.1
+# KivyMD for Material Design widgets (required)
+kivymd>=1.2.0
 
 # Plyer - Native notifications and dialogs
 plyer>=2.1.0

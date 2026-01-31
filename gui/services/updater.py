@@ -291,21 +291,29 @@ class UpdateService:
                     # Get configurable sample limit from settings (default: 50)
                     sample_limit = app.database.get_setting("samples_per_update", 50)
                     
-                    samples = list(client.search_evasion_samples(
+                    # Use iterator directly to show progress during search
+                    # Don't convert to list() which blocks until all samples found
+                    sample_iterator = client.search_evasion_samples(
                         os_filter=os_type,  # Filter by OS type
                         limit=sample_limit,
                         fetch_overview=True,  # Get overview for accurate OS detection
-                    ))
+                    )
                 except Exception as e:
                     logger.warning(f"Error searching {os_type}: {e}")
                     continue
                 
-                self.progress.total_samples = len(samples)
-                logger.info(f"Found {len(samples)} {os_type} samples")
+                # Set estimated sample count for progress bar
+                self.progress.total_samples = sample_limit
+                self.progress.message = f"Searching {os_type}..."
+                self._notify_progress()
+                logger.info(f"Searching for up to {sample_limit} {os_type} samples...")
                 
-                # Process each sample
-                for sample_idx, sample in enumerate(samples):
-                    self.progress.current_sample = sample_idx + 1
+                # Process samples as they're found (shows incremental progress)
+                sample_idx = 0
+                for sample in sample_iterator:
+                    sample_idx += 1
+                    self.progress.current_sample = sample_idx
+                    self.progress.message = f"Processing {os_type} sample {sample_idx}..."
                     self._notify_progress()
                     
                     sample_id = sample.get("id")

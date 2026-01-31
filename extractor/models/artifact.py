@@ -91,14 +91,16 @@ class Provenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
     
     sample_count: int = 1
-    sample_hashes: list[str] = Field(default_factory=list)
+    sample_hashes: list[str] = Field(default_factory=list)  # SHA256 hashes
+    sample_sha1s: list[str] = Field(default_factory=list)   # SHA1 hashes
+    sample_ids: list[str] = Field(default_factory=list)     # Triage sample IDs
     families: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     
-    @field_validator("sample_hashes")
+    @field_validator("sample_hashes", "sample_sha1s", "sample_ids")
     @classmethod
-    def cap_sample_hashes(cls, v: list[str]) -> list[str]:
-        """Cap sample hashes at 100 to prevent unbounded growth."""
+    def cap_sample_lists(cls, v: list[str]) -> list[str]:
+        """Cap sample lists at 100 to prevent unbounded growth."""
         if len(v) > 100:
             return v[:100]
         return v
@@ -169,6 +171,8 @@ def create_file_artifact(
     category: str,
     evasion_purpose: EvasionPurpose | None = None,
     sample_hash: str | None = None,
+    sample_sha1: str | None = None,
+    sample_id: str | None = None,
 ) -> Artifact:
     """
     Create a file artifact.
@@ -179,6 +183,8 @@ def create_file_artifact(
         category: Category (e.g., "emulator_files", "sandbox_files")
         evasion_purpose: What the malware is detecting
         sample_hash: SHA256 of the sample that checks for this
+        sample_sha1: SHA1 of the sample
+        sample_id: Triage sample ID for linking
     """
     # Debug: Log artifact creation
     import logging
@@ -190,7 +196,11 @@ def create_file_artifact(
     provenance = Provenance()
     if sample_hash:
         provenance.sample_hashes = [sample_hash]
-        provenance.sample_count = 1
+    if sample_sha1:
+        provenance.sample_sha1s = [sample_sha1]
+    if sample_id:
+        provenance.sample_ids = [sample_id]
+    provenance.sample_count = 1
     
     return Artifact(
         os=os_type,
@@ -219,6 +229,8 @@ def create_property_artifact(
     category: str,
     recommended_value: str = "",
     sample_hash: str | None = None,
+    sample_sha1: str | None = None,
+    sample_id: str | None = None,
 ) -> Artifact:
     """Create an Android system property artifact."""
     import logging
@@ -227,7 +239,11 @@ def create_property_artifact(
     provenance = Provenance()
     if sample_hash:
         provenance.sample_hashes = [sample_hash]
-        provenance.sample_count = 1
+    if sample_sha1:
+        provenance.sample_sha1s = [sample_sha1]
+    if sample_id:
+        provenance.sample_ids = [sample_id]
+    provenance.sample_count = 1
     
     return Artifact(
         os=OSType.ANDROID,
@@ -256,6 +272,8 @@ def create_registry_artifact(
     value_name: str | None = None,
     category: str = "vm_registry",
     sample_hash: str | None = None,
+    sample_sha1: str | None = None,
+    sample_id: str | None = None,
 ) -> Artifact:
     """Create a Windows registry artifact."""
     import logging
@@ -267,7 +285,11 @@ def create_registry_artifact(
     provenance = Provenance()
     if sample_hash:
         provenance.sample_hashes = [sample_hash]
-        provenance.sample_count = 1
+    if sample_sha1:
+        provenance.sample_sha1s = [sample_sha1]
+    if sample_id:
+        provenance.sample_ids = [sample_id]
+    provenance.sample_count = 1
     
     return Artifact(
         os=OSType.WINDOWS,
@@ -295,6 +317,8 @@ def create_process_artifact(
     process_name: str,
     category: str,
     sample_hash: str | None = None,
+    sample_sha1: str | None = None,
+    sample_id: str | None = None,
 ) -> Artifact:
     """Create a process artifact."""
     import logging
@@ -306,7 +330,11 @@ def create_process_artifact(
     provenance = Provenance()
     if sample_hash:
         provenance.sample_hashes = [sample_hash]
-        provenance.sample_count = 1
+    if sample_sha1:
+        provenance.sample_sha1s = [sample_sha1]
+    if sample_id:
+        provenance.sample_ids = [sample_id]
+    provenance.sample_count = 1
     
     return Artifact(
         os=os_type,

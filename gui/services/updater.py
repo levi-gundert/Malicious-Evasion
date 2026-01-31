@@ -327,6 +327,9 @@ class UpdateService:
                         sample_sha1 = sample_info.get("sha1", "")
                         sample_sha256 = sample_info.get("sha256", "")
                         
+                        # Debug: Log extracted sample info
+                        logger.debug(f"Sample {sample_id} - SHA1: {sample_sha1[:12] if sample_sha1 else 'N/A'}..., SHA256: {sample_sha256[:12] if sample_sha256 else 'N/A'}...")
+                        
                         # Check score
                         score = overview.get("analysis", {}).get("score", 0)
                         if score is None:
@@ -385,15 +388,28 @@ class UpdateService:
                             existing = app.database.get_artifact_by_id(artifact_dict["id"])
 
                             if existing:
-                                app.database.update_artifact(artifact_dict["id"], {
+                                # Update existing artifact - also update source info if missing
+                                update_data = {
                                     "confidence": max(existing["confidence"], artifact_dict["confidence"]),
                                     "sample_count": existing["sample_count"] + 1,
                                     "last_seen": datetime.now(timezone.utc).isoformat(),
-                                })
+                                }
+                                # Populate source info if it was missing before
+                                if not existing.get("source_sha1") and sample_sha1:
+                                    update_data["source_sha1"] = sample_sha1
+                                if not existing.get("source_sha256") and sample_sha256:
+                                    update_data["source_sha256"] = sample_sha256
+                                if not existing.get("source_sample_id") and sample_id:
+                                    update_data["source_sample_id"] = sample_id
+                                if not existing.get("triage_url") and sample_id:
+                                    update_data["triage_url"] = f"https://tria.ge/{sample_id}"
+                                
+                                app.database.update_artifact(artifact_dict["id"], update_data)
                                 total_updated += 1
                             else:
                                 app.database.add_artifact(artifact_dict)
                                 total_new += 1
+                                logger.debug(f"Added artifact {artifact_dict['id']} with SHA1: {sample_sha1[:12] if sample_sha1 else 'N/A'}...")
 
                             total_artifacts += 1
                         

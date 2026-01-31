@@ -127,23 +127,32 @@ class ArtifactCard(MDCard):
         )
         content.add_widget(purpose_label)
         
-        # Row 4: Source sample info
+        # Row 4: Source sample info (SHA1/SHA256 and Triage link)
         source_sha1 = artifact.get("source_sha1", "")
+        source_sha256 = artifact.get("source_sha256", "")
         sample_id = artifact.get("source_sample_id", "")
+        triage_url = artifact.get("triage_url", "")
         
+        # Prefer SHA1 for display, fallback to SHA256
         if source_sha1:
-            sha1_short = source_sha1[:12] + "..." if len(source_sha1) > 12 else source_sha1
-            source_text = f"Source: SHA1 {sha1_short}"
-            if sample_id:
-                source_text += f" | Triage: {sample_id}"
+            hash_display = f"SHA1: {source_sha1[:16]}..."
+        elif source_sha256:
+            hash_display = f"SHA256: {source_sha256[:16]}..."
         else:
-            source_text = "Source: Unknown"
+            hash_display = "Hash: Unknown"
+        
+        # Build source text with Triage link
+        if sample_id:
+            source_text = f"[b]{hash_display}[/b]  |  Triage: [color=00D4FF][u]{sample_id}[/u][/color]"
+        else:
+            source_text = f"[b]{hash_display}[/b]"
         
         source_label = MDLabel(
             text=source_text,
+            markup=True,
             font_style="Caption",
             theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
+            text_color=(0.8, 0.8, 0.8, 1),
             size_hint_y=0.16,
         )
         content.add_widget(source_label)

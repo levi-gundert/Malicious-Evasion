@@ -5,10 +5,14 @@ Extracts evasion artifacts from Linux behavioral reports:
 - Filesystem checks (VM files, container indicators, analysis tools)
 - Process enumeration
 - Environment variable checks
+
+Note: Triage's Linux kernel logs (stahp.json) use Base64 encoding for paths
+and have a nested event structure with 'kind' field indicating entry type.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Any
@@ -30,6 +34,19 @@ from extractor.models.artifact import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def decode_base64_safe(value: Any) -> str:
+    """Safely decode a Base64 string, returning empty string on failure."""
+    if not value:
+        return ""
+    # Handle non-string values (e.g., integers in kernel logs)
+    if not isinstance(value, str):
+        return str(value)
+    try:
+        return base64.b64decode(value).decode("utf-8", errors="replace")
+    except Exception:
+        return value  # Return as-is if not valid Base64
 
 
 # =============================================================================
@@ -106,6 +123,45 @@ LINUX_DEBUGGER_PATTERNS = [
     r".*debugger.*",
 ]
 
+# System discovery patterns (often used for evasion fingerprinting)
+LINUX_SYSTEM_DISCOVERY_PATTERNS = [
+    # CPU/Hardware info
+    r"/proc/cpuinfo",
+    r"/proc/meminfo",
+    r"/proc/version",
+    r"/proc/uptime",
+    r"/proc/stat",
+    r"/proc/loadavg",
+    # Disk/Device info
+    r"/proc/scsi/scsi",
+    r"/proc/ide/.*",
+    r"/proc/diskstats",
+    r"/sys/block/.*",
+    r"/sys/devices/.*",
+    # DMI/SMBIOS
+    r"/sys/class/dmi/id/.*",
+    r"/sys/firmware/dmi/.*",
+    # Network info
+    r"/proc/net/.*",
+    r"/sys/class/net/.*",
+    # System locale/timezone
+    r"/etc/timezone",
+    r"/etc/localtime",
+    r"/etc/locale.*",
+    r"/etc/default/locale",
+    # Hostname/machine-id
+    r"/etc/hostname",
+    r"/etc/machine-id",
+    r"/var/lib/dbus/machine-id",
+    # User enumeration
+    r"/etc/passwd",
+    r"/etc/shadow",
+    r"/etc/group",
+    # Boot info
+    r"/proc/cmdline",
+    r"/boot/.*",
+]
+
 # Analysis tool process patterns
 LINUX_ANALYSIS_PROCESS_PATTERNS = [
     r"gdb",
@@ -149,56 +205,67 @@ LINUX_ENV_PATTERNS = [
 ]
 
 
-def categorize_linux_file(path: str) -> tuple[str, EvasionPurpose | None]:
+def categorize_linux_file(path: Any) -> tuple[str, EvasionPurpose | None]:
     """
     Categorize a Linux file path for evasion detection.
     
     Returns:
         Tuple of (category, evasion_purpose)
     """
+    # Handle non-string values safely
+    if not isinstance(path, str):
+        return "", None
     path_lower = path.lower()
     
     # VM files
     for pattern in LINUX_VM_FILE_PATTERNS:
         if re.match(pattern, path_lower):
-            return "vm_files", EvasionPurpose.ANTI_VM
+            return "vm_files", EvasionPurpose.VM
     
     # Container indicators
     for pattern in LINUX_CONTAINER_PATTERNS:
         if re.match(pattern, path_lower):
-            return "container_indicators", EvasionPurpose.ANTI_SANDBOX
+            return "container_indicators", EvasionPurpose.CONTAINER
     
     # Sandbox/analysis files
     for pattern in LINUX_SANDBOX_FILE_PATTERNS:
         if re.match(pattern, path_lower):
-            return "analysis_tools", EvasionPurpose.ANTI_SANDBOX
+            return "analysis_tools", EvasionPurpose.SANDBOX
     
     # Debugger indicators
     for pattern in LINUX_DEBUGGER_PATTERNS:
         if re.match(pattern, path_lower):
-            return "debugger_indicators", EvasionPurpose.ANTI_DEBUG
+            return "debugger_indicators", EvasionPurpose.DEBUGGER
+    
+    # System discovery (fingerprinting for evasion)
+    for pattern in LINUX_SYSTEM_DISCOVERY_PATTERNS:
+        if re.match(pattern, path_lower):
+            return "system_discovery", EvasionPurpose.SANDBOX
     
     return "", None
 
 
-def categorize_linux_process(name: str) -> tuple[str, EvasionPurpose | None]:
+def categorize_linux_process(name: Any) -> tuple[str, EvasionPurpose | None]:
     """
     Categorize a Linux process name for evasion detection.
     
     Returns:
         Tuple of (category, evasion_purpose)
     """
+    # Handle non-string values safely
+    if not isinstance(name, str):
+        return "", None
     name_lower = name.lower()
     
     # Analysis tools
     for pattern in LINUX_ANALYSIS_PROCESS_PATTERNS:
         if re.match(pattern, name_lower):
-            return "analysis_tools", EvasionPurpose.ANTI_SANDBOX
+            return "analysis_tools", EvasionPurpose.SANDBOX
     
     # VM processes
     for pattern in LINUX_VM_PROCESS_PATTERNS:
         if re.match(pattern, name_lower):
-            return "vm_processes", EvasionPurpose.ANTI_VM
+            return "vm_processes", EvasionPurpose.VM
     
     return "", None
 
@@ -249,16 +316,59 @@ class LinuxExtractor(BaseExtractor):
         context: ExtractionContext,
         seen: set[str],
     ) -> list[Artifact]:
-        """Extract artifacts from stahp.json kernel logs."""
+        """
+        Extract artifacts from stahp.json kernel logs.
+        
+        Triage's stahp.json format uses:
+        - kind: "stahp.File", "stahp.Process", "stahp.Syscall*", etc.
+        - event: nested dict with actual data, paths are Base64 encoded
+        """
         artifacts = []
         
         if not context.kernel_logs:
             return artifacts
         
-        for entry in context.kernel_logs:
-            kind = entry.get("kind", "")
+        # Limit processing to avoid hanging on massive kernel logs (some samples have millions of entries)
+        MAX_KERNEL_LOG_ENTRIES = 50000
+        MAX_ARTIFACTS_PER_SOURCE = 500
+        
+        log_count = len(context.kernel_logs)
+        if log_count > MAX_KERNEL_LOG_ENTRIES:
+            self.logger.warning(
+                f"Kernel logs too large ({log_count} entries), limiting to first {MAX_KERNEL_LOG_ENTRIES}"
+            )
+        
+        for i, entry in enumerate(context.kernel_logs):
+            # Stop if we've processed enough entries
+            if i >= MAX_KERNEL_LOG_ENTRIES:
+                self.logger.debug(f"Reached kernel log entry limit ({MAX_KERNEL_LOG_ENTRIES})")
+                break
             
-            if kind in ("file_stat", "file_open", "file_access"):
+            # Stop if we've found enough artifacts from this source
+            if len(artifacts) >= MAX_ARTIFACTS_PER_SOURCE:
+                self.logger.debug(f"Reached artifact limit ({MAX_ARTIFACTS_PER_SOURCE}) from kernel logs")
+                break
+            kind = entry.get("kind", "")
+            event = entry.get("event", {})
+            
+            # Handle Triage stahp.json format (kind starts with "stahp.")
+            if kind == "stahp.File":
+                artifact = self._process_stahp_file(event, context.sample_hash, seen)
+                if artifact:
+                    artifacts.append(artifact)
+            
+            elif kind == "stahp.Process":
+                artifact = self._process_stahp_process(event, context.sample_hash, seen)
+                if artifact:
+                    artifacts.append(artifact)
+            
+            elif kind.startswith("stahp.Syscall"):
+                artifact = self._process_stahp_syscall(event, context.sample_hash, seen)
+                if artifact:
+                    artifacts.append(artifact)
+            
+            # Also handle legacy format (kind is file_stat, file_open, etc.)
+            elif kind in ("file_stat", "file_open", "file_access"):
                 artifact = self._process_file_operation(entry, context.sample_hash, seen)
                 if artifact:
                     artifacts.append(artifact)
@@ -269,6 +379,119 @@ class LinuxExtractor(BaseExtractor):
                     artifacts.append(artifact)
         
         return artifacts
+    
+    def _process_stahp_file(
+        self,
+        event: dict[str, Any],
+        sample_hash: str,
+        seen: set[str],
+    ) -> Artifact | None:
+        """Process a stahp.File event from kernel logs."""
+        # Get path from srcpath (Base64 encoded)
+        srcpath_b64 = event.get("srcpath", "")
+        path = decode_base64_safe(srcpath_b64)
+        
+        if not path:
+            return None
+        
+        # Skip if already seen
+        if path in seen:
+            return None
+        
+        # Categorize the path
+        category, evasion_purpose = categorize_linux_file(path)
+        if not category:
+            return None
+        
+        seen.add(path)
+        file_kind = event.get("kind", "access")  # OpenRead, OpenWrite, etc.
+        
+        return self.create_artifact(
+            artifact_type=ArtifactType.FILE,
+            category=category,
+            match_value=path,
+            evasion_purpose=evasion_purpose,
+            description=f"File {file_kind}: {path}",
+            sample_hash=sample_hash,
+        )
+    
+    def _process_stahp_process(
+        self,
+        event: dict[str, Any],
+        sample_hash: str,
+        seen: set[str],
+    ) -> Artifact | None:
+        """Process a stahp.Process event from kernel logs."""
+        image = event.get("Image", "")
+        if not image:
+            return None
+        
+        # Get just the process name from the path
+        if "/" in image:
+            name = image.split("/")[-1]
+        else:
+            name = image
+        
+        if name in seen:
+            return None
+        
+        # Check for evasion-related processes
+        category, purpose = categorize_linux_process(name)
+        if category:
+            seen.add(name)
+            return self.create_artifact(
+                artifact_type=ArtifactType.PROCESS,
+                category=category,
+                match_value=name,
+                evasion_purpose=purpose,
+                description=f"Process: {image}",
+                sample_hash=sample_hash,
+            )
+        
+        # Also check the full path for VM/container indicators
+        category, purpose = categorize_linux_file(image)
+        if category:
+            seen.add(image)
+            return self.create_artifact(
+                artifact_type=ArtifactType.FILE,
+                category=category,
+                match_value=image,
+                evasion_purpose=purpose,
+                description=f"Process image: {image}",
+                sample_hash=sample_hash,
+            )
+        
+        return None
+    
+    def _process_stahp_syscall(
+        self,
+        event: dict[str, Any],
+        sample_hash: str,
+        seen: set[str],
+    ) -> Artifact | None:
+        """Process a stahp.Syscall* event from kernel logs."""
+        syscall_kind = event.get("kind", "")
+        
+        # Look for file-related syscalls with path arguments
+        if syscall_kind in ("stat", "lstat", "access", "open", "openat", "readlink", "chdir"):
+            # arg0 is usually the path (Base64 encoded)
+            path_b64 = event.get("arg0", "")
+            path = decode_base64_safe(path_b64)
+            
+            if path and path not in seen:
+                category, purpose = categorize_linux_file(path)
+                if category:
+                    seen.add(path)
+                    return self.create_artifact(
+                        artifact_type=ArtifactType.FILE,
+                        category=category,
+                        match_value=path,
+                        evasion_purpose=purpose,
+                        description=f"Syscall {syscall_kind}: {path}",
+                        sample_hash=sample_hash,
+                    )
+        
+        return None
     
     def _process_file_operation(
         self,
@@ -331,11 +554,11 @@ class LinuxExtractor(BaseExtractor):
         
         # Determine evasion purpose
         if env_name.upper() in ("LD_PRELOAD", "LD_DEBUG"):
-            purpose = EvasionPurpose.ANTI_DEBUG
+            purpose = EvasionPurpose.DEBUGGER
         elif env_name.upper() in ("container", "KUBERNETES_SERVICE_HOST"):
-            purpose = EvasionPurpose.ANTI_SANDBOX
+            purpose = EvasionPurpose.CONTAINER
         else:
-            purpose = EvasionPurpose.ANTI_ANALYSIS
+            purpose = EvasionPurpose.SANDBOX
         
         return self.create_artifact(
             artifact_type=ArtifactType.ENVIRONMENT_VAR,
@@ -409,7 +632,7 @@ class LinuxExtractor(BaseExtractor):
                         artifact_type=ArtifactType.ENVIRONMENT_VAR,
                         category="environment_vars",
                         match_value=ioc,
-                        evasion_purpose=evasion_purpose or EvasionPurpose.ANTI_ANALYSIS,
+                        evasion_purpose=evasion_purpose or EvasionPurpose.SANDBOX,
                         description=f"From signature: {sig_name}",
                         sample_hash=sample_hash,
                     )

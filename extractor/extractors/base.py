@@ -245,7 +245,9 @@ def is_evasion_signature(signature: dict[str, Any]) -> bool:
     evasion_tags = {
         "evasion", "anti-vm", "anti-sandbox", "anti-debug",
         "anti-analysis", "defense_evasion", "anti_vm",
-        "anti_sandbox", "anti_debug", "anti_analysis"
+        "anti_sandbox", "anti_debug", "anti_analysis",
+        # Discovery techniques are often used for evasion
+        "discovery", "reconnaissance",
     }
     
     for tag in tags:
@@ -291,9 +293,24 @@ def is_evasion_signature(signature: dict[str, Any]) -> bool:
         if keyword in name or keyword in label:
             return True
     
-    # Check TTPs - T1497 is Defense Evasion: Virtualization/Sandbox Evasion
+    # Check TTPs - Various evasion and discovery TTPs
     ttps = signature.get("ttp", [])
-    evasion_ttps = {"T1497", "T1497.001", "T1497.002", "T1497.003", "T1622", "T1633"}
+    evasion_ttps = {
+        # Defense Evasion: Virtualization/Sandbox Evasion
+        "T1497", "T1497.001", "T1497.002", "T1497.003",
+        # Debugger Evasion
+        "T1622",
+        # Virtualization/Sandbox Evasion (Mobile)
+        "T1633", "T1633.001",
+        # Discovery techniques often used for evasion
+        "T1082",  # System Information Discovery
+        "T1614", "T1614.001",  # System Location Discovery
+        "T1057",  # Process Discovery
+        "T1012",  # Query Registry
+        "T1518",  # Software Discovery
+        "T1083",  # File and Directory Discovery
+        "T1007",  # System Service Discovery
+    }
     
     for ttp in ttps:
         if ttp in evasion_ttps:

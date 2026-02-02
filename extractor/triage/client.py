@@ -169,7 +169,9 @@ def infer_os_from_sample(sample_data: dict[str, Any]) -> str | None:
     
     # Strategy 2: Check target filename extension
     # Try multiple locations where filename might be
+    # NOTE: Search results have 'filename' key directly, overview has 'target'/'sample.target'
     filename = (
+        sample_data.get("filename") or  # Search results have this key
         sample_data.get("target") or
         sample_data.get("sample", {}).get("target") or
         sample_data.get("sample", {}).get("name") or
@@ -177,7 +179,7 @@ def infer_os_from_sample(sample_data: dict[str, Any]) -> str | None:
     )
     os_type = infer_os_from_filename(filename)
     if os_type:
-        logger.debug(f"infer_os_from_sample: found OS from filename: {os_type}")
+        logger.debug(f"infer_os_from_sample: found OS from filename '{filename}': {os_type}")
         return os_type
     
     # Strategy 3: Check analysis tags
@@ -523,6 +525,7 @@ class TriageClient:
         os_filter: str | list[str] | None = None,
         limit: int = 50,
         fetch_overview: bool = False,
+        max_search: int = 500,
     ) -> Iterator[dict[str, Any]]:
         """
         Search for samples with evasion behavior (tag:evasion).
@@ -540,6 +543,9 @@ class TriageClient:
             limit: Maximum number of samples to return
             fetch_overview: If True, fetch full overview for each sample
                            (slower but provides more accurate OS detection)
+            max_search: Maximum samples to search through when filtering by OS.
+                       This allows finding rare OS types (e.g., Linux) by searching
+                       deeper into the results. Default 500.
             
         Yields:
             Sample dicts with added 'inferred_os' field
@@ -552,6 +558,10 @@ class TriageClient:
             # Get only Windows evasion samples  
             for sample in client.search_evasion_samples(os_filter="windows"):
                 print(sample['id'])
+            
+            # Search deeper to find rare Linux samples
+            for sample in client.search_evasion_samples(os_filter="linux", max_search=1000):
+                print(sample['id'])
         """
         # Normalize OS filter to a set for fast lookup
         os_filter_set: set[str] | None = None
@@ -560,19 +570,39 @@ class TriageClient:
                 os_filter_set = {os_filter.lower()}
             else:
                 os_filter_set = {os.lower() for os in os_filter}
-            logger.info(f"Searching for evasion samples, OS filter: {os_filter_set}")
+            logger.info(f"Searching for evasion samples, OS filter: {os_filter_set}, max_search: {max_search}")
         else:
             logger.info(f"Searching for all evasion samples (no OS filter)")
         
-        # Search for tag:evasion - this is the primary search
-        query = "tag:evasion"
+        # Build search query based on OS filter
+        # For rare OS types (Linux, macOS), use tag:evasion AND tag:<os> for better results
+        # The generic tag:evasion search is dominated by Android (~72%) and Windows (~28%)
+        if os_filter_set and len(os_filter_set) == 1:
+            os_type = list(os_filter_set)[0]
+            if os_type in ("linux", "macos"):
+                # Use combined tag search for rare OS types
+                query = f"tag:evasion AND tag:{os_type}"
+                logger.info(f"Using targeted search for rare OS: {query}")
+            else:
+                query = "tag:evasion"
+        else:
+            query = "tag:evasion"
+        
         logger.debug(f"Executing search query: {query}")
         
         returned = 0
+        searched = 0
         skipped_no_os = 0
         skipped_os_filter = 0
         
-        for sample in self.search(query, limit=limit * 2):  # Over-fetch to account for filtering
+        # Calculate search limit: if filtering by OS, search deeper to find matches
+        # For rare OS types like Linux, we need to search through many more samples
+        search_limit = max_search if os_filter_set else limit * 2
+        
+        for sample in self.search(query, limit=search_limit):
+            searched += 1
+            
+            # Stop if we've found enough matching samples
             if returned >= limit:
                 break
             
@@ -602,6 +632,9 @@ class TriageClient:
             # Apply OS filter if specified
             if os_filter_set and inferred_os not in os_filter_set:
                 skipped_os_filter += 1
+                # Log periodically to show search progress for rare OS types
+                if skipped_os_filter % 50 == 0:
+                    logger.info(f"Searched {searched} samples, found {returned}/{limit} {os_filter} matches so far...")
                 logger.debug(f"Sample {sample_id} is {inferred_os}, not in filter {os_filter_set}")
                 continue
             
@@ -613,7 +646,7 @@ class TriageClient:
         
         # Log summary
         logger.info(
-            f"Evasion search complete: returned={returned}, "
+            f"Evasion search complete: searched={searched}, returned={returned}, "
             f"skipped_no_os={skipped_no_os}, skipped_os_filter={skipped_os_filter}"
         )
     
@@ -741,6 +774,9 @@ class TriageClient:
         
         return data
     
+    # Maximum size for kernel logs (100MB) - larger files cause memory/performance issues
+    MAX_KERNEL_LOG_SIZE = 100 * 1024 * 1024  # 100MB
+    
     def get_kernel_logs(
         self,
         sample_id: str,
@@ -774,6 +810,25 @@ class TriageClient:
                 return cached.get("entries", cached.get("logs", []))
         
         logger.debug(f"Fetching kernel logs: {sample_id}/{task_id}/logs/{log_file}")
+        
+        # Check content-length first to avoid downloading huge files
+        endpoint = f"/samples/{sample_id}/{task_id}/logs/{log_file}"
+        try:
+            self.rate_limiter.acquire()
+            head_response = self.session.head(
+                f"{self.base_url}{endpoint}",
+                timeout=10,
+            )
+            content_length = int(head_response.headers.get("Content-Length", 0))
+            if content_length > self.MAX_KERNEL_LOG_SIZE:
+                logger.warning(
+                    f"Kernel logs too large ({content_length / 1024 / 1024:.1f}MB > "
+                    f"{self.MAX_KERNEL_LOG_SIZE / 1024 / 1024:.0f}MB limit), skipping: {sample_id}"
+                )
+                return None
+        except Exception as e:
+            # If HEAD fails, continue with GET (some servers don't support HEAD)
+            logger.debug(f"HEAD request failed, continuing with GET: {e}")
         
         try:
             response = self._request("GET", f"/samples/{sample_id}/{task_id}/logs/{log_file}")
@@ -816,6 +871,7 @@ class TriageClient:
         self,
         sample_id: str,
         include_kernel_logs: bool = True,
+        target_os: str | None = None,
     ) -> dict[str, Any]:
         """
         Fetch all data for a sample in one call.
@@ -823,6 +879,9 @@ class TriageClient:
         Args:
             sample_id: Sample ID
             include_kernel_logs: Whether to fetch kernel logs
+            target_os: Target OS type to fetch data for. If provided, will find
+                      the behavioral task that matches this OS (important for
+                      multi-platform samples like those with both Linux and Windows tasks).
             
         Returns:
             Dict with overview, behavioral report, and optionally kernel logs
@@ -843,23 +902,77 @@ class TriageClient:
             logger.warning(f"Failed to get overview: {e}")
             return result
         
-        # Detect OS from overview
-        os_type = self._detect_os(result["overview"])
+        # Detect OS from overview (or use target_os if provided)
+        os_type = target_os or self._detect_os(result["overview"])
         result["os_type"] = os_type
         
-        # Fetch behavioral report
+        # Find the correct behavioral task for the target OS
+        # Multi-platform samples may have behavioral1 on Windows but behavioral7 on Linux
+        task_id = self._find_behavioral_task_for_os(result["overview"], os_type)
+        logger.debug(f"Using behavioral task {task_id} for OS {os_type}")
+        
+        # Fetch behavioral report from the correct task
         try:
-            result["behavioral_report"] = self.get_behavioral_report(sample_id)
+            result["behavioral_report"] = self.get_behavioral_report(sample_id, task_id)
         except NotFoundError:
-            logger.debug(f"No behavioral report for {sample_id}")
+            logger.debug(f"No behavioral report for {sample_id}/{task_id}")
         except TriageAPIError as e:
             logger.warning(f"Failed to get behavioral report: {e}")
         
-        # Fetch kernel logs
+        # Fetch kernel logs from the correct task
         if include_kernel_logs and os_type:
-            result["kernel_logs"] = self.get_kernel_logs(sample_id, os_type=os_type)
+            result["kernel_logs"] = self.get_kernel_logs(sample_id, task_id, os_type=os_type)
         
         return result
+    
+    def _find_behavioral_task_for_os(
+        self,
+        overview: dict[str, Any],
+        target_os: str | None,
+    ) -> str:
+        """
+        Find the behavioral task ID that matches the target OS.
+        
+        Multi-platform samples in Triage may have tasks like:
+        - behavioral1: windows7-x64
+        - behavioral7: ubuntu-18.04-amd64
+        - behavioral8: debian-9-armhf
+        
+        This method finds the first behavioral task matching the target OS.
+        
+        Args:
+            overview: Sample overview data
+            target_os: Target OS type (linux, windows, android, macos)
+            
+        Returns:
+            Task ID suffix like "behavioral1" or "behavioral7"
+        """
+        if not target_os:
+            return "behavioral1"
+        
+        tasks = overview.get("tasks", {})
+        
+        for task_id, task_info in tasks.items():
+            if not isinstance(task_info, dict):
+                continue
+            
+            # Only consider behavioral tasks
+            if task_info.get("kind") != "behavioral":
+                continue
+            
+            # Check if this task's OS matches our target
+            task_os = task_info.get("os", "")
+            inferred = infer_os_from_platform(task_os)
+            
+            if inferred == target_os:
+                # Extract task suffix (e.g., "behavioral7" from "260129-xxx-behavioral7")
+                task_suffix = task_id.split("-")[-1]
+                logger.debug(f"Found matching task for {target_os}: {task_suffix} (os={task_os})")
+                return task_suffix
+        
+        # Fallback to behavioral1
+        logger.debug(f"No task found for OS {target_os}, falling back to behavioral1")
+        return "behavioral1"
     
     def _detect_os(self, overview: dict[str, Any]) -> str | None:
         """

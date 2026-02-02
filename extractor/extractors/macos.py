@@ -5,10 +5,14 @@ Extracts evasion artifacts from macOS behavioral reports:
 - Filesystem checks (VM files, sandbox indicators)
 - System profiler / sysctl commands
 - Process enumeration
+
+NOTE: The bigmac.json kernel logs from Triage use BASE64 encoding for
+file paths and process images. This extractor handles decoding them.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Any
@@ -29,6 +33,40 @@ from extractor.models.artifact import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def decode_base64_field(value: Any) -> str:
+    """
+    Decode a base64-encoded field from bigmac kernel logs.
+    
+    The bigmac.json format from Triage encodes paths and images in base64.
+    This function safely decodes them.
+    
+    Args:
+        value: The value to decode (may be base64 string, regular string, or None)
+        
+    Returns:
+        Decoded string, or empty string if decoding fails
+    """
+    if not value or not isinstance(value, str):
+        return ""
+    
+    # Check if it looks like base64 (alphanumeric + / + = padding)
+    # Regular paths start with / so they won't be valid base64
+    if value.startswith("/"):
+        return value  # Already a path, not encoded
+    
+    # Try to decode as base64
+    try:
+        # Base64 strings are typically alphanumeric with + / and = padding
+        decoded = base64.b64decode(value).decode('utf-8', errors='replace')
+        # Verify it looks like a valid path or command
+        if decoded and (decoded.startswith("/") or decoded.startswith("-") or " " in decoded):
+            logger.debug(f"Decoded base64: {value[:20]}... -> {decoded[:50]}...")
+            return decoded
+        return value  # Not a valid path after decoding, return original
+    except Exception:
+        return value  # Not valid base64, return as-is
 
 
 # =============================================================================
@@ -88,12 +126,42 @@ MACOS_PROFILER_COMMANDS = [
     "system_profiler SPHardwareDataType",
     "system_profiler SPSoftwareDataType",
     "system_profiler SPDisplaysDataType",
+    "system_profiler SPNetworkDataType",
+    "system_profiler SPUSBDataType",
     "sysctl hw.model",
     "sysctl hw.machine",
     "sysctl machdep.cpu.brand_string",
     "sysctl kern.version",
+    "sysctl kern.boottime",
+    "sysctl hw.memsize",
+    "sysctl hw.ncpu",
+    "sysctl hw.physicalcpu",
     "ioreg -l",
     "ioreg -rd1 -c IOPlatformExpertDevice",
+    "diskutil list",
+    "networksetup -listallhardwareports",
+    "sw_vers",
+    "uname -a",
+    "hostname",
+]
+
+# System discovery file patterns (hardware/system info)
+MACOS_SYSTEM_DISCOVERY_PATTERNS = [
+    # Hardware/System info
+    r"/System/Library/CoreServices/SystemVersion\.plist",
+    r"/System/Library/CoreServices/ServerVersion\.plist",
+    r"/Library/Preferences/SystemConfiguration/.*\.plist",
+    r"/private/var/db/.AppleSetupDone",
+    # User info
+    r"/var/log/install\.log",
+    r"/var/log/system\.log",
+    r"/Users/.*",
+    # Network config
+    r"/etc/hosts",
+    r"/etc/resolv\.conf",
+    r"/Library/Preferences/com\.apple\.sharing\.*/.*",
+    # Hardware identifiers
+    r"/var/db/uuidtext/.*",
 ]
 
 # VM process patterns
@@ -149,6 +217,11 @@ def categorize_macos_file(path: str) -> tuple[str, EvasionPurpose | None]:
     for pattern in MACOS_SANDBOX_FILE_PATTERNS:
         if re.match(pattern, path_lower, re.IGNORECASE):
             return "sandbox_files", EvasionPurpose.ANTI_SANDBOX
+    
+    # System discovery (fingerprinting for evasion)
+    for pattern in MACOS_SYSTEM_DISCOVERY_PATTERNS:
+        if re.match(pattern, path_lower, re.IGNORECASE):
+            return "system_discovery", EvasionPurpose.ANTI_SANDBOX
     
     return "", None
 
@@ -252,11 +325,14 @@ class MacOSExtractor(BaseExtractor):
         artifacts = []
         
         if not context.kernel_logs:
+            self.logger.debug("No kernel logs available for macOS extraction")
             return artifacts
         
         for entry in context.kernel_logs:
             kind = entry.get("kind", "")
+            event = entry.get("event", {})
             
+            # Legacy format (structured events)
             if kind in ("file_stat", "file_open", "file_access", "getattrlist"):
                 artifact = self._process_file_operation(entry, context.sample_hash, seen)
                 if artifact:
@@ -266,6 +342,63 @@ class MacOSExtractor(BaseExtractor):
                 artifact = self._process_exec_operation(entry, context.sample_hash, seen)
                 if artifact:
                     artifacts.append(artifact)
+            
+            # BigMac format (modern Triage format)
+            # NOTE: bigmac.json uses BASE64 encoding for paths and images
+            elif kind == "bigmac.Process":
+                # Process creation events - decode base64 image field
+                image = decode_base64_field(event.get("image", ""))
+                cmd = decode_base64_field(event.get("command", "")) or image
+                if cmd:
+                    artifact = self._process_exec_operation(
+                        {"command": cmd, "path": cmd, "args": event.get("args", [])},
+                        context.sample_hash,
+                        seen
+                    )
+                    if artifact:
+                        artifacts.append(artifact)
+                    
+                    # Also check if the image path itself is a VM indicator
+                    if image:
+                        artifact = self._process_file_operation(
+                            {"path": image},
+                            context.sample_hash,
+                            seen
+                        )
+                        if artifact:
+                            artifacts.append(artifact)
+            
+            # BigMac syscall events - try to extract file paths from known syscalls
+            # NOTE: arg0 is BASE64 encoded in bigmac format
+            elif kind.startswith("bigmac.Syscall"):
+                syscall_kind = event.get("kind", "")
+                
+                # File-related syscalls that might have path arguments
+                if syscall_kind in ("open", "open_nocancel", "stat", "stat64", 
+                                   "lstat", "lstat64", "access", "getattrlist",
+                                   "getxattr", "listxattr", "readlink"):
+                    # Decode base64 path from arg0
+                    path = decode_base64_field(event.get("arg0", "")) or event.get("path", "")
+                    if path and isinstance(path, str) and path.startswith("/"):
+                        artifact = self._process_file_operation(
+                            {"path": path},
+                            context.sample_hash,
+                            seen
+                        )
+                        if artifact:
+                            artifacts.append(artifact)
+                
+                # Process/command execution syscalls
+                elif syscall_kind in ("execve", "posix_spawn", "fork", "vfork"):
+                    cmd = decode_base64_field(event.get("arg0", "")) or event.get("command", "")
+                    if cmd:
+                        artifact = self._process_exec_operation(
+                            {"command": cmd, "path": cmd},
+                            context.sample_hash,
+                            seen
+                        )
+                        if artifact:
+                            artifacts.append(artifact)
         
         return artifacts
     

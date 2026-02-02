@@ -44,26 +44,66 @@ logger = logging.getLogger(__name__)
 # Windows-specific patterns
 # =============================================================================
 
-# VM file patterns
+# VM file patterns - includes device paths (\??\...) used in kernel logs
 WINDOWS_VM_FILE_PATTERNS = {
     "vmware": [
         r"C:\\Windows\\System32\\drivers\\vmhgfs\.sys",
         r"C:\\Windows\\System32\\drivers\\vmmouse\.sys",
         r"C:\\Windows\\System32\\drivers\\vmci\.sys",
+        r"C:\\Windows\\System32\\drivers\\vm3dmp\.sys",
+        r"C:\\Windows\\System32\\drivers\\vmrawdsk\.sys",
+        r"C:\\Windows\\System32\\drivers\\vmusbmouse\.sys",
         r"C:\\Program Files\\VMware.*",
         r".*vmware.*\.dll",
         r".*vmware.*\.sys",
+        r".*vmware.*",  # Generic VMware match
+        r".*vmtoolsd.*",
+        r".*vmwaretray.*",
     ],
     "virtualbox": [
         r"C:\\Windows\\System32\\drivers\\VBoxMouse\.sys",
         r"C:\\Windows\\System32\\drivers\\VBoxGuest\.sys",
         r"C:\\Windows\\System32\\drivers\\VBoxSF\.sys",
+        r"C:\\Windows\\System32\\drivers\\VBoxVideo\.sys",
+        r"C:\\Windows\\System32\\VBoxDisp\.dll",
+        r"C:\\Windows\\System32\\VBoxHook\.dll",
+        r"C:\\Windows\\System32\\VBoxMRXNP\.dll",
+        r"C:\\Windows\\System32\\VBoxOGL\.dll",
+        r"C:\\Windows\\System32\\VBoxTray\.exe",
+        r"C:\\Windows\\System32\\VBoxService\.exe",
         r"C:\\Program Files\\Oracle\\VirtualBox.*",
         r".*vbox.*\.dll",
         r".*vbox.*\.sys",
+        r".*vbox.*",  # Generic VirtualBox match
+        r".*virtualbox.*",
     ],
     "hyperv": [
         r"C:\\Windows\\System32\\drivers\\vmbus\.sys",
+        r"C:\\Windows\\System32\\drivers\\VMBusHID\.sys",
+        r"C:\\Windows\\System32\\drivers\\hyperkbd\.sys",
+        r".*hyper-v.*",
+        r".*hyperv.*",
+    ],
+    "qemu": [
+        r".*QEMU.*",  # Match QEMU in device paths like \??\IDE#CdRomQEMU_...
+        r".*qemu.*",
+        r".*virtio.*",  # QEMU virtio drivers
+    ],
+    "parallels": [
+        r".*parallels.*",
+        r".*prl_.*",
+        r"C:\\Program Files\\Parallels.*",
+    ],
+    "xen": [
+        r".*xen.*\.sys",
+        r".*xennet.*",
+        r".*xenvbd.*",
+    ],
+    "kvm": [
+        r".*vioscsi.*",
+        r".*viostor.*",
+        r".*vioinput.*",
+        r".*balloon.*",
     ],
 }
 
@@ -83,17 +123,74 @@ WINDOWS_ANALYSIS_TOOL_FILE_PATTERNS = [
     r".*\\procmon\\.*",
 ]
 
-# VM registry keys
+# VM registry keys - comprehensive patterns for VM detection
 WINDOWS_VM_REGISTRY_PATTERNS = {
     "vmware": [
-        r"HKLM\\SOFTWARE\\VMware.*",
-        r"HKLM\\HARDWARE\\.*vmware.*",
+        r".*SOFTWARE\\VMware.*",
+        r".*HARDWARE\\.*vmware.*",
+        r".*VMware, Inc\..*",
+        r".*\\VMware Tools.*",
     ],
     "virtualbox": [
-        r"HKLM\\SOFTWARE\\Oracle\\VirtualBox.*",
-        r"HKLM\\HARDWARE\\ACPI\\DSDT\\VBOX.*",
+        r".*SOFTWARE\\Oracle\\VirtualBox.*",
+        r".*HARDWARE\\ACPI\\DSDT\\VBOX.*",
+        r".*HARDWARE\\ACPI\\FADT\\VBOX.*",
+        r".*HARDWARE\\ACPI\\RSDT\\VBOX.*",
+        r".*VirtualBox Guest.*",
+        r".*\\Enum\\PCI\\VEN_80EE.*",  # VirtualBox PCI vendor ID
+    ],
+    "hyperv": [
+        r".*SOFTWARE\\Microsoft\\Virtual Machine.*",
+        r".*Hyper-V.*",
+    ],
+    "qemu": [
+        r".*QEMU.*",
+        r".*\\Enum\\PCI\\VEN_1AF4.*",  # QEMU/KVM virtio vendor ID
+        r".*Red Hat.*",
+    ],
+    "parallels": [
+        r".*Parallels.*",
+        r".*\\Enum\\PCI\\VEN_1AB8.*",  # Parallels vendor ID
+    ],
+    "general_vm": [
+        # Hardware detection keys commonly checked
+        r".*HARDWARE\\DESCRIPTION\\System\\BIOS.*",
+        r".*HARDWARE\\DESCRIPTION\\System\\CentralProcessor.*",
+        r".*HARDWARE\\DEVICEMAP\\Scsi.*",
+        r".*SYSTEM\\.*\\Services\\Disk\\Enum.*",
+        r".*SYSTEM\\.*\\Enum\\IDE.*",
+        r".*SYSTEM\\.*\\Enum\\SCSI.*",
+        # System information keys
+        r".*SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ProductId.*",
+        r".*SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProductId.*",
+        r".*HARDWARE\\DESCRIPTION\\System\\SystemBiosVersion.*",
+        r".*HARDWARE\\DESCRIPTION\\System\\VideoBiosVersion.*",
     ],
 }
+
+# Sandbox detection registry keys
+WINDOWS_SANDBOX_REGISTRY_PATTERNS = [
+    r".*\\Cuckoo.*",
+    r".*\\Sandbox.*",
+    r".*\\Wine.*",
+    r".*\\Sandboxie.*",
+    r".*\\SbieDll.*",
+    # Common sandbox usernames/computer names
+    r".*\\CurrentVersion\\Explorer\\Shell Folders.*",
+    r".*\\Volatile Environment.*",
+]
+
+# System discovery registry keys (often used for evasion)
+WINDOWS_DISCOVERY_REGISTRY_PATTERNS = [
+    r".*\\Control\\NLS\\Language.*",  # Language check
+    r".*\\Control\\NLS\\Locale.*",
+    r".*\\Control\\Keyboard Layout.*",  # Keyboard layout
+    r".*\\Control\\TimeZoneInformation.*",  # Timezone
+    r".*\\Microsoft\\Cryptography\\MachineGuid.*",  # Machine GUID
+    r".*\\Microsoft\\Windows NT\\CurrentVersion\\InstallDate.*",  # Install date
+    r".*\\Microsoft\\Windows NT\\CurrentVersion\\RegisteredOwner.*",
+    r".*\\Microsoft\\Windows NT\\CurrentVersion\\RegisteredOrganization.*",
+]
 
 # VM processes
 WINDOWS_VM_PROCESSES = {
@@ -356,11 +453,31 @@ class WindowsExtractor(BaseExtractor):
                 reg_path = event.get("path") or event.get("key")
                 if reg_path:
                     normalized = self._normalize_registry_path(reg_path)
+                    # Also check for VM-related registry patterns directly
                     artifact = self._process_registry_operation(
                         {"key": normalized, "value": event.get("value") or event.get("values", "")},
                         context.sample_hash,
                         seen,
                     )
+                    # If no artifact from strict matching, check for broad VM patterns
+                    if not artifact and normalized not in seen:
+                        vm_keywords = ["vmware", "virtualbox", "vbox", "qemu", "hyper-v", 
+                                      "parallels", "xen", "virtual", "sandbox", "cuckoo"]
+                        reg_lower = normalized.lower()
+                        for kw in vm_keywords:
+                            if kw in reg_lower:
+                                seen.add(normalized)
+                                self.logger.debug(f"Found VM registry check: {normalized}")
+                                artifact = self.create_artifact(
+                                    artifact_type=ArtifactType.REGISTRY,
+                                    category="vm_registry",
+                                    match_value=normalized,
+                                    evasion_purpose=EvasionPurpose.VM,
+                                    description=f"VM registry check: {normalized}",
+                                    sample_hash=context.sample_hash,
+                                    case_sensitive=False,
+                                )
+                                break
                     if artifact:
                         artifacts.append(artifact)
 
@@ -459,26 +576,40 @@ class WindowsExtractor(BaseExtractor):
             return None
         
         # Check if this is a VM-related registry key
-        is_vm_registry = False
+        category = None
+        evasion_purpose = None
+        
+        # Check VM patterns
         for vm_type, patterns in WINDOWS_VM_REGISTRY_PATTERNS.items():
             if matches_any_pattern(key, patterns):
-                is_vm_registry = True
+                category = "vm_registry"
+                evasion_purpose = EvasionPurpose.VM
                 break
         
-        if not is_vm_registry:
-            # Check for sandbox indicators
-            if not any(kw in key.lower() for kw in ["sandbox", "cuckoo", "analysis"]):
-                return None
+        # Check sandbox patterns
+        if not category:
+            if matches_any_pattern(key, WINDOWS_SANDBOX_REGISTRY_PATTERNS):
+                category = "sandbox_registry"
+                evasion_purpose = EvasionPurpose.SANDBOX
+        
+        # Check discovery patterns (system info gathering for evasion)
+        if not category:
+            if matches_any_pattern(key, WINDOWS_DISCOVERY_REGISTRY_PATTERNS):
+                category = "system_discovery"
+                evasion_purpose = EvasionPurpose.SANDBOX
+        
+        if not category:
+            return None
         
         seen.add(match_value)
         
-        self.logger.debug(f"Found registry check: {match_value}")
+        self.logger.debug(f"Found registry check: {match_value} -> {category}")
         
         return self.create_artifact(
             artifact_type=ArtifactType.REGISTRY,
-            category="vm_registry" if is_vm_registry else "sandbox_registry",
+            category=category,
             match_value=match_value,
-            evasion_purpose=EvasionPurpose.VM if is_vm_registry else EvasionPurpose.SANDBOX,
+            evasion_purpose=evasion_purpose,
             description=f"Registry check: {match_value}",
             sample_hash=sample_hash,
             case_sensitive=False,
@@ -553,8 +684,32 @@ class WindowsExtractor(BaseExtractor):
     ) -> Artifact | None:
         """Categorize an IOC and create an appropriate artifact."""
         
+        ioc_upper = ioc.upper()
+        
+        # Check if it looks like a native registry path (\REGISTRY\MACHINE\...)
+        # These come from Triage signatures and need to be converted to HKLM format
+        if ioc_upper.startswith("\\REGISTRY\\MACHINE\\") or ioc_upper.startswith("\\REGISTRY\\USER\\"):
+            normalized = self._normalize_registry_path(ioc)
+            sig_name = signature.get("name", "")
+            
+            # Determine category based on signature context
+            category = "system_discovery"  # Default for discovery signatures
+            if any(kw in sig_name.lower() for kw in ["vm", "virtual", "sandbox"]):
+                category = "vm_registry"
+            
+            self.logger.debug(f"Found registry IOC from signature: {normalized}")
+            return self.create_artifact(
+                artifact_type=ArtifactType.REGISTRY,
+                category=category,
+                match_value=normalized,
+                evasion_purpose=evasion_purpose or EvasionPurpose.SANDBOX,
+                description=f"From signature: {sig_name}",
+                sample_hash=sample_hash,
+                case_sensitive=False,
+            )
+        
         # Check if it looks like a file path
-        if ioc.startswith("C:") or ioc.startswith("\\"):
+        if ioc.startswith("C:") or (ioc.startswith("\\") and not ioc_upper.startswith("\\REGISTRY")):
             categorization = categorize_windows_file(ioc)
             if categorization:
                 category, purpose = categorization
@@ -568,8 +723,8 @@ class WindowsExtractor(BaseExtractor):
                     case_sensitive=False,
                 )
         
-        # Check if it looks like a registry key
-        if ioc.startswith("HKLM") or ioc.startswith("HKEY") or ioc.startswith("HKU"):
+        # Check if it looks like a registry key (user-friendly format)
+        if ioc_upper.startswith("HKLM") or ioc_upper.startswith("HKEY") or ioc_upper.startswith("HKU") or ioc_upper.startswith("HKCU"):
             return self.create_artifact(
                 artifact_type=ArtifactType.REGISTRY,
                 category="vm_registry",
@@ -581,7 +736,7 @@ class WindowsExtractor(BaseExtractor):
             )
         
         # Check if it looks like a process name
-        if ioc.endswith(".exe"):
+        if ioc.lower().endswith(".exe"):
             categorization = categorize_windows_process(ioc)
             if categorization:
                 category, purpose = categorization

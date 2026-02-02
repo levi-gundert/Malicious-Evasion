@@ -6,239 +6,159 @@ Displays artifacts in a filterable list with:
 - Category filter
 - Privilege level filter (user/admin)
 - Search by value
-- Sort by confidence
+- Sort options (OS, Category, Confidence, Recent)
 
 Built with KivyMD Material Design components.
+Uses ScrollView with dynamically created widgets for reliability.
 """
 
 import logging
-from typing import List, Optional
+import webbrowser
+from typing import List, Optional, Dict, Any
 
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
+from kivymd.uix.button import MDRaisedButton, MDFlatButton
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.textfield import MDTextField
-from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
+from kivy.uix.scrollview import ScrollView
 from kivy.metrics import dp
 from kivy.clock import Clock
 
 logger = logging.getLogger(__name__)
 
 
-class ArtifactCard(MDCard):
+class ArtifactCard(MDBoxLayout):
     """
-    Card widget displaying an artifact's details.
+    A card widget representing a single artifact in the browse list.
     
-    Shows:
-    - Artifact value (file path, registry key, etc.)
-    - Category and type
-    - Evasion purpose
-    - Source sample info
-    - Privilege requirement badge
-    - Confidence score
-    - Select checkbox
+    Displays artifact value, metadata, and selection checkbox.
     """
     
-    def __init__(self, artifact: dict, on_select=None, **kwargs):
+    def __init__(self, artifact_data: Dict[str, Any], index: int, on_select_callback, **kwargs):
         super().__init__(**kwargs)
-        self.artifact = artifact
-        self.on_select_callback = on_select
         self.orientation = "horizontal"
         self.size_hint_y = None
-        self.height = dp(140)
-        self.padding = dp(16)
-        self.spacing = dp(16)
-        self.radius = [dp(12)]
-        self.md_bg_color = (0.071, 0.129, 0.212, 1)  # Navy surface
+        self.height = dp(90)
+        self.padding = [dp(12), dp(8)]
+        self.spacing = dp(12)
+        self.md_bg_color = (0.071, 0.129, 0.212, 1)  # Dark card background
         
-        # Determine badge color based on privilege
-        privilege = artifact.get("privilege_level", "user")
-        if privilege == "admin":
+        # Store artifact data and index for later reference
+        self.artifact_data = artifact_data
+        self.index = index
+        self.on_select_callback = on_select_callback
+        self.selected = False
+        
+        self._build_ui()
+    
+    def _build_ui(self):
+        """Build the card UI."""
+        # Checkbox for selection
+        self.checkbox = MDCheckbox(
+            size_hint=(None, None),
+            size=(dp(36), dp(36)),
+            pos_hint={"center_y": 0.5},
+            color_active=(0.102, 0.451, 0.91, 1),
+        )
+        self.checkbox.bind(active=self._on_checkbox_change)
+        self.add_widget(self.checkbox)
+        
+        # Main content column
+        content = MDBoxLayout(orientation="vertical", spacing=dp(2))
+        
+        # Row 1: Artifact value (path/key)
+        value = self.artifact_data.get("value", "")
+        display_value = value if len(value) < 80 else value[:77] + "..."
+        
+        value_label = MDLabel(
+            text=display_value,
+            font_style="Body2",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
+            size_hint_y=0.35,
+            shorten=True,
+            shorten_from="right",
+        )
+        content.add_widget(value_label)
+        
+        # Row 2: OS | Category | Purpose
+        os_type = self.artifact_data.get("os", "unknown").upper()
+        category = self.artifact_data.get("category", "unknown")
+        purpose = (self.artifact_data.get("evasion_purpose") or "evasion").replace("_", " ").title()
+        
+        meta_label = MDLabel(
+            text=f"{os_type} | {category} | {purpose}",
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
+            size_hint_y=0.3,
+        )
+        content.add_widget(meta_label)
+        
+        # Row 3: Confidence | Sample count | Triage link
+        confidence = self.artifact_data.get("confidence", 0) or 0
+        conf_pct = f"{confidence:.0%}" if isinstance(confidence, float) else str(confidence)
+        sample_count = self.artifact_data.get("sample_count", 1)
+        sample_id = self.artifact_data.get("source_sample_id", "")
+        
+        if sample_id:
+            info_text = f"Conf: {conf_pct} | Seen: {sample_count}x | [ref=triage]{sample_id}[/ref]"
+        else:
+            info_text = f"Conf: {conf_pct} | Seen: {sample_count}x"
+        
+        self.info_label = MDLabel(
+            text=info_text,
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0, 0.831, 1, 1),
+            size_hint_y=0.35,
+            markup=True,
+        )
+        self.info_label.bind(on_ref_press=self._on_link_press)
+        content.add_widget(self.info_label)
+        
+        self.add_widget(content)
+        
+        # Right side: Privilege badge
+        priv_level = self.artifact_data.get("privilege_level", "user").lower()
+        if priv_level == "admin":
             badge_color = (0.984, 0.737, 0.016, 1)  # Yellow
-        elif privilege == "root":
+        elif priv_level == "root":
             badge_color = (0.918, 0.263, 0.208, 1)  # Red
         else:
             badge_color = (0.204, 0.659, 0.325, 1)  # Green
         
-        # Checkbox for selection
-        checkbox_container = MDBoxLayout(
-            size_hint=(None, 1),
-            width=dp(40),
-        )
-        self.checkbox = MDCheckbox(
+        badge = MDLabel(
+            text=priv_level.upper(),
             size_hint=(None, None),
-            size=(dp(40), dp(40)),
-            pos_hint={"center_y": 0.5},
-            color_active=(0.102, 0.451, 0.91, 1),
-        )
-        if on_select:
-            self.checkbox.bind(active=lambda cb, val: on_select(artifact, val))
-        checkbox_container.add_widget(self.checkbox)
-        self.add_widget(checkbox_container)
-        
-        # Main content
-        content = MDBoxLayout(orientation="vertical", spacing=dp(4))
-        
-        # Row 1: Value (file path, registry key, etc.)
-        value = artifact.get("value", "Unknown")
-        display_value = value if len(value) < 70 else value[:67] + "..."
-        value_label = MDLabel(
-            text=f"[b]Placement:[/b] {display_value}",
-            markup=True,
-            font_style="Body1",
-            theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
-            size_hint_y=0.22,
-        )
-        content.add_widget(value_label)
-        
-        # Row 2: Type and category
-        artifact_type = artifact.get("artifact_type", "unknown")
-        category = artifact.get("category", "unknown")
-        os_type = artifact.get("os", "unknown")
-        type_text = f"{os_type.upper()} | {artifact_type} | {category}"
-        type_label = MDLabel(
-            text=type_text,
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
-            size_hint_y=0.16,
-        )
-        content.add_widget(type_label)
-        
-        # Row 3: Evasion purpose
-        evasion_purpose = artifact.get("evasion_purpose", "")
-        description = artifact.get("description", "")
-        purpose_display = evasion_purpose or description or "Evasion technique"
-        purpose_formatted = purpose_display.replace("_", " ").title()
-        purpose_label = MDLabel(
-            text=f"[b]Purpose:[/b] {purpose_formatted}",
-            markup=True,
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0, 0.831, 1, 1),  # Cyan
-            size_hint_y=0.18,
-        )
-        content.add_widget(purpose_label)
-        
-        # Row 4: Source sample info (SHA1/SHA256 and Triage link)
-        source_sha1 = artifact.get("source_sha1", "")
-        source_sha256 = artifact.get("source_sha256", "")
-        sample_id = artifact.get("source_sample_id", "")
-        triage_url = artifact.get("triage_url", "")
-        
-        # Store for click handling
-        self.triage_url = triage_url
-        self.sample_id = sample_id
-        
-        # Prefer SHA1 for display, fallback to SHA256
-        if source_sha1:
-            hash_display = f"SHA1: {source_sha1[:16]}..."
-        elif source_sha256:
-            hash_display = f"SHA256: {source_sha256[:16]}..."
-        else:
-            hash_display = "Hash: Unknown"
-        
-        # Source info row with clickable Triage link
-        source_row = MDBoxLayout(
-            orientation="horizontal",
-            size_hint_y=0.16,
-            spacing=dp(8),
-        )
-        
-        # Hash label
-        hash_label = MDLabel(
-            text=f"[b]{hash_display}[/b]",
-            markup=True,
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0.8, 0.8, 0.8, 1),
-            size_hint_x=0.5,
-        )
-        source_row.add_widget(hash_label)
-        
-        # Triage link button (if available)
-        if sample_id and triage_url:
-            triage_btn = MDFlatButton(
-                text=f"Triage: {sample_id}",
-                size_hint=(None, 1),
-                width=dp(180),
-                theme_text_color="Custom",
-                text_color=(0, 0.831, 1, 1),
-                on_release=lambda x, url=triage_url: self._open_url(url),
-            )
-            source_row.add_widget(triage_btn)
-        else:
-            spacer = MDLabel(text="", size_hint_x=0.5)
-            source_row.add_widget(spacer)
-        
-        content.add_widget(source_row)
-        
-        # Row 5: Confidence and sample count
-        confidence = artifact.get("confidence", 0)
-        sample_count = artifact.get("sample_count", 1)
-        if isinstance(confidence, (int, float)):
-            conf_text = f"Confidence: {confidence:.0%} | Seen in {sample_count} sample(s)"
-        else:
-            conf_text = f"Confidence: {confidence} | Seen in {sample_count} sample(s)"
-        conf_label = MDLabel(
-            text=conf_text,
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
-            size_hint_y=0.14,
-        )
-        content.add_widget(conf_label)
-        
-        self.add_widget(content)
-        
-        # Right side: Badge + View button
-        right_container = MDBoxLayout(
-            orientation="vertical",
-            size_hint=(None, 1),
-            width=dp(90),
-            spacing=dp(8),
-        )
-        
-        # Privilege badge
-        badge = MDCard(
-            size_hint=(1, None),
-            height=dp(28),
-            radius=[dp(4)],
-            md_bg_color=badge_color,
-        )
-        badge_label = MDLabel(
-            text=privilege.upper(),
+            size=(dp(60), dp(24)),
+            halign="center",
+            valign="middle",
             font_style="Caption",
             bold=True,
-            halign="center",
             theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
+            text_color=badge_color,
         )
-        badge.add_widget(badge_label)
-        right_container.add_widget(badge)
-        
-        # Spacer
-        right_container.add_widget(MDBoxLayout())
-        
-        self.add_widget(right_container)
+        self.add_widget(badge)
     
-    def _open_url(self, url: str):
-        """Open a URL in the default browser."""
-        import webbrowser
-        if url:
-            logger.info(f"Opening URL: {url}")
-            webbrowser.open(url)
+    def _on_checkbox_change(self, checkbox, active):
+        """Handle checkbox state change."""
+        self.selected = active
+        if self.on_select_callback:
+            self.on_select_callback(self.index, active)
     
-    def _open_triage(self):
-        """Open the Triage URL in the default browser."""
-        self._open_url(self.triage_url)
+    def _on_link_press(self, instance, ref):
+        """Handle link clicks in labels."""
+        if ref == "triage":
+            triage_url = self.artifact_data.get("triage_url", "")
+            if triage_url:
+                logger.info(f"Opening Triage URL: {triage_url}")
+                webbrowser.open(triage_url)
 
 
 class BrowseScreen(MDScreen):
@@ -253,6 +173,8 @@ class BrowseScreen(MDScreen):
             "privilege": None,
             "search": "",
         }
+        self._artifact_data: List[Dict[str, Any]] = []
+        self._artifact_widgets: List[ArtifactCard] = []
         self._build_ui()
     
     def _build_ui(self):
@@ -385,6 +307,30 @@ class BrowseScreen(MDScreen):
         priv_layout.add_widget(self.privilege_spinner)
         filter_card.add_widget(priv_layout)
         
+        # Sort dropdown
+        sort_layout = MDBoxLayout(size_hint_x=None, width=dp(160), spacing=dp(8))
+        sort_label = MDLabel(
+            text="Sort:",
+            font_style="Caption",
+            size_hint=(None, 1),
+            width=dp(35),
+            theme_text_color="Custom",
+            text_color=(0.604, 0.627, 0.651, 1),
+        )
+        sort_layout.add_widget(sort_label)
+        
+        self.sort_spinner = Spinner(
+            text="OS",
+            values=["OS", "Category", "Confidence", "Recent"],
+            size_hint=(1, None),
+            height=dp(40),
+            background_color=(0.118, 0.227, 0.373, 1),
+            color=(1, 1, 1, 1),
+        )
+        self.sort_spinner.bind(text=self._on_filter_change)
+        sort_layout.add_widget(self.sort_spinner)
+        filter_card.add_widget(sort_layout)
+        
         # Search box
         search_layout = MDBoxLayout(spacing=dp(8))
         search_label = MDLabel(
@@ -420,30 +366,48 @@ class BrowseScreen(MDScreen):
         )
         main_layout.add_widget(self.results_label)
         
-        # ===== ARTIFACTS LIST =====
-        scroll = ScrollView(
-            size_hint=(1, 1),
-            bar_width=dp(12),  # Wider scrollbar for easier use
-            bar_color=(0.3, 0.5, 0.8, 0.9),  # Blue scrollbar
-            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),  # Faded when inactive
-            scroll_type=['bars', 'content'],  # Allow both bar and content scrolling
-        )
-        self.artifacts_layout = MDBoxLayout(
+        # ===== ARTIFACTS LIST (ScrollView with dynamic widgets) =====
+        # Create container with background color
+        list_container = MDBoxLayout(
             orientation="vertical",
-            spacing=dp(10),
-            size_hint_y=None,
-            padding=[0, dp(8), dp(8), dp(8)],
-            adaptive_height=True,
+            md_bg_color=(0.05, 0.09, 0.16, 1),
+            padding=[dp(4), dp(4)],
         )
-        self.artifacts_layout.bind(minimum_height=self.artifacts_layout.setter("height"))
-        scroll.add_widget(self.artifacts_layout)
-        main_layout.add_widget(scroll)
+        
+        # ScrollView for scrollable artifact list
+        # scroll_type must include 'bars' for draggable scrollbar
+        self.scroll_view = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(14),
+            bar_color=(0.4, 0.6, 0.9, 1.0),
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.6),
+            do_scroll_x=False,
+            do_scroll_y=True,
+            scroll_type=['bars', 'content'],  # Enable both bar dragging and content scrolling
+            bar_margin=dp(2),
+            bar_pos_y='right',
+            effect_cls='ScrollEffect',  # Smoother scrolling
+        )
+        
+        # Container for artifact cards - must have size_hint_y=None for scrolling
+        self.artifacts_container = MDBoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(4),
+            padding=[dp(4), dp(4)],
+        )
+        # Bind height to minimum_height so it grows with content
+        self.artifacts_container.bind(minimum_height=self.artifacts_container.setter('height'))
+        
+        self.scroll_view.add_widget(self.artifacts_container)
+        list_container.add_widget(self.scroll_view)
+        main_layout.add_widget(list_container)
         
         self.add_widget(main_layout)
     
     def on_enter(self):
         """Called when screen is displayed."""
-        logger.debug("Entering browse screen")
+        logger.info("Entering browse screen")
         
         app = MDApp.get_running_app()
         if app:
@@ -485,58 +449,61 @@ class BrowseScreen(MDScreen):
         priv_filter = self.privilege_spinner.text.lower() if self.privilege_spinner.text != "All" else None
         search_text = self.search_input.text.strip()
         
-        logger.debug(f"Refreshing artifacts: os={os_filter}, cat={cat_filter}, priv={priv_filter}")
+        logger.info(f"Refreshing artifacts: os={os_filter}, cat={cat_filter}, priv={priv_filter}")
         
         artifacts = app.database.get_artifacts(
             os_type=os_filter,
             category=cat_filter,
             privilege_level=priv_filter,
             search_text=search_text if search_text else None,
-            limit=500,
+            limit=200,  # Limit for performance with dynamic widgets
         )
         
-        logger.debug(f"Got {len(artifacts)} artifacts from database")
+        logger.info(f"Got {len(artifacts)} artifacts from database")
         
-        self.artifacts_layout.clear_widgets()
+        # Sort artifacts
+        sort_option = self.sort_spinner.text
+        artifacts = self._sort_artifacts(artifacts, sort_option)
+        
+        # Store artifact data
+        self._artifact_data = [dict(a, selected=False) for a in artifacts]
+        
+        # Clear existing widgets
+        self.artifacts_container.clear_widgets()
+        self._artifact_widgets = []
+        
+        # Create new artifact cards
+        for i, artifact in enumerate(self._artifact_data):
+            card = ArtifactCard(
+                artifact_data=artifact,
+                index=i,
+                on_select_callback=self._on_artifact_select,
+            )
+            self._artifact_widgets.append(card)
+            self.artifacts_container.add_widget(card)
+        
+        logger.info(f"Created {len(self._artifact_widgets)} artifact cards")
+        
+        # Reset selections
         self.selected_artifacts = []
         self._update_place_button()
         
-        for artifact in artifacts:
-            card = ArtifactCard(artifact, on_select=self._on_artifact_select)
-            self.artifacts_layout.add_widget(card)
-        
         self.results_label.text = f"Showing {len(artifacts)} artifacts"
-        
-        if not artifacts:
-            if os_filter:
-                hint = (
-                    f"No {os_filter.capitalize()} artifacts in database.\n"
-                    "Run 'Check for Updates' on the dashboard with that OS selected."
-                )
-            else:
-                hint = "No artifacts match the current filters.\nTry changing filters or run 'Check for Updates'."
-            
-            no_results = MDLabel(
-                text=hint,
-                font_style="Body2",
-                theme_text_color="Custom",
-                text_color=(0.604, 0.627, 0.651, 1),
-                size_hint_y=None,
-                height=dp(80),
-                halign="center",
-            )
-            self.artifacts_layout.add_widget(no_results)
     
-    def _on_artifact_select(self, artifact: dict, selected: bool):
+    def _on_artifact_select(self, index: int, selected: bool):
         """Handle artifact selection/deselection."""
-        if selected:
-            if artifact not in self.selected_artifacts:
-                self.selected_artifacts.append(artifact)
-        else:
-            if artifact in self.selected_artifacts:
-                self.selected_artifacts.remove(artifact)
-        
-        self._update_place_button()
+        if index < len(self._artifact_data):
+            self._artifact_data[index]["selected"] = selected
+            
+            if selected:
+                if self._artifact_data[index] not in self.selected_artifacts:
+                    self.selected_artifacts.append(self._artifact_data[index])
+            else:
+                # Remove by matching id
+                art_id = self._artifact_data[index].get("id")
+                self.selected_artifacts = [a for a in self.selected_artifacts if a.get("id") != art_id]
+            
+            self._update_place_button()
     
     def _update_place_button(self):
         """Update the place button text and state."""
@@ -554,6 +521,62 @@ class BrowseScreen(MDScreen):
             placement_screen = app.screen_manager.get_screen("placement")
             placement_screen.set_artifacts(self.selected_artifacts.copy())
             app.navigate_to("placement")
+    
+    def _sort_artifacts(self, artifacts: List[dict], sort_option: str) -> List[dict]:
+        """
+        Sort artifacts based on the selected sort option.
+        
+        Args:
+            artifacts: List of artifact dicts
+            sort_option: One of "OS", "Category", "Confidence", "Recent"
+            
+        Returns:
+            Sorted list of artifacts
+        """
+        if not artifacts:
+            return artifacts
+        
+        # Define OS order for consistent sorting
+        os_order = {"android": 0, "windows": 1, "linux": 2, "macos": 3}
+        
+        if sort_option == "OS":
+            return sorted(
+                artifacts,
+                key=lambda a: (
+                    os_order.get(a.get("os", "").lower(), 99),
+                    a.get("category", ""),
+                    a.get("value", ""),
+                )
+            )
+        elif sort_option == "Category":
+            return sorted(
+                artifacts,
+                key=lambda a: (
+                    a.get("category", ""),
+                    os_order.get(a.get("os", "").lower(), 99),
+                    a.get("value", ""),
+                )
+            )
+        elif sort_option == "Confidence":
+            return sorted(
+                artifacts,
+                key=lambda a: (
+                    -(a.get("confidence", 0) or 0),
+                    os_order.get(a.get("os", "").lower(), 99),
+                    a.get("value", ""),
+                )
+            )
+        elif sort_option == "Recent":
+            return sorted(
+                artifacts,
+                key=lambda a: (
+                    a.get("last_seen", "") or "",
+                    os_order.get(a.get("os", "").lower(), 99),
+                ),
+                reverse=True,
+            )
+        
+        return artifacts
     
     def _go_back(self):
         """Navigate back to dashboard."""

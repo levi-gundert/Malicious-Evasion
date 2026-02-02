@@ -82,6 +82,15 @@ class UpdateService:
     # OS types to fetch
     OS_TYPES = ["android", "windows", "linux", "macos"]
     
+    # Target distribution for "All" OS updates (percentages should sum to 100)
+    # This ensures balanced artifact collection across platforms
+    OS_DISTRIBUTION = {
+        "android": 0.35,  # 35%
+        "windows": 0.35,  # 35%
+        "linux": 0.25,    # 25%
+        "macos": 0.05,    # 5%
+    }
+    
     def __init__(self):
         """Initialize the update service."""
         self.is_running = False
@@ -277,19 +286,33 @@ class UpdateService:
             total_artifacts = 0
             
             # Process each OS type
+            # Get configurable limits from settings
+            total_sample_limit = app.database.get_setting("samples_per_update", 100)
+            max_search = app.database.get_setting("max_search_depth", 500)
+            
+            # Calculate per-OS limits based on distribution (when fetching all OSes)
+            is_all_os_update = len(os_types_to_fetch) == len(self.OS_TYPES)
+            
             for os_idx, os_type in enumerate(os_types_to_fetch):
                 self.progress.current_os = os_type.upper()
                 self.progress.os_completed = os_idx
                 self.progress.current_sample = 0
                 self._notify_progress()
                 
-                logger.info(f"Searching for {os_type} samples...")
+                # Calculate sample limit for this OS
+                if is_all_os_update:
+                    # Use distribution percentages for balanced collection
+                    distribution = self.OS_DISTRIBUTION.get(os_type, 0.25)
+                    sample_limit = max(5, int(total_sample_limit * distribution))
+                    logger.info(f"Searching for {os_type} samples ({int(distribution * 100)}% = {sample_limit} samples)...")
+                else:
+                    # Single OS update - use full limit
+                    sample_limit = total_sample_limit
+                    logger.info(f"Searching for {os_type} samples ({sample_limit} samples)...")
                 
                 # Search for samples with tag:evasion, filtered by OS
                 # The new API infers OS from file extension and platform fields
                 try:
-                    # Get configurable sample limit from settings (default: 50)
-                    sample_limit = app.database.get_setting("samples_per_update", 50)
                     
                     # Use iterator directly to show progress during search
                     # Don't convert to list() which blocks until all samples found
@@ -297,6 +320,7 @@ class UpdateService:
                         os_filter=os_type,  # Filter by OS type
                         limit=sample_limit,
                         fetch_overview=True,  # Get overview for accurate OS detection
+                        max_search=max_search,  # Search deeper to find rare OS types
                     )
                 except Exception as e:
                     logger.warning(f"Error searching {os_type}: {e}")
@@ -304,9 +328,9 @@ class UpdateService:
                 
                 # Set estimated sample count for progress bar
                 self.progress.total_samples = sample_limit
-                self.progress.message = f"Searching {os_type}..."
+                self.progress.message = f"Searching {os_type} (max {max_search} samples)..."
                 self._notify_progress()
-                logger.info(f"Searching for up to {sample_limit} {os_type} samples...")
+                logger.info(f"Searching for up to {sample_limit} {os_type} samples (searching through max {max_search})...")
                 
                 # Process samples as they're found (shows incremental progress)
                 sample_idx = 0
@@ -332,8 +356,9 @@ class UpdateService:
                     logger.debug(f"Processing {sample_id} (inferred OS: {inferred_os})")
                     
                     try:
-                        # Fetch sample data
-                        data = client.fetch_sample_data(sample_id)
+                        # Fetch sample data - pass target OS so we get the right behavioral task
+                        # Multi-platform samples may have behavioral1 on Windows but behavioral7 on Linux
+                        data = client.fetch_sample_data(sample_id, target_os=os_type)
                         overview = data.get("overview", {})
                         
                         if not overview:

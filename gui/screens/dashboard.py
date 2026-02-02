@@ -105,39 +105,31 @@ class DashboardScreen(MDScreen):
         # ===== HEADER =====
         header = MDBoxLayout(
             size_hint_y=None,
-            height=dp(150),
+            height=dp(220),  # Increased for larger mascot
             spacing=dp(20),
         )
         
-        # Mascot image
+        # Mascot image (fox) - 50% larger than original
         mascot_path = ASSETS_PATH / "mascot.png"
         if mascot_path.exists():
             mascot = Image(
                 source=str(mascot_path),
                 size_hint=(None, None),
-                size=(dp(140), dp(140)),
+                size=(dp(210), dp(210)),  # 50% larger (was 140)
                 fit_mode="contain",
             )
             header.add_widget(mascot)
         
-        # Title section
+        # Title section - single line
         title_box = MDBoxLayout(orientation="vertical", spacing=dp(4))
         
         title = MDLabel(
-            text="Malicious Evasion",
+            text="Malicious Evasion Artifact Placer",
             font_style="H4",
             theme_text_color="Custom",
             text_color=(1, 1, 1, 1),
         )
         title_box.add_widget(title)
-        
-        subtitle = MDLabel(
-            text="Artifact Placer",
-            font_style="Subtitle1",
-            theme_text_color="Custom",
-            text_color=(0.604, 0.627, 0.651, 1),
-        )
-        title_box.add_widget(subtitle)
         
         header.add_widget(title_box)
         

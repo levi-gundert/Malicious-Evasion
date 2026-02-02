@@ -87,10 +87,36 @@ class StatCard(MDCard):
 class DashboardScreen(MDScreen):
     """Main dashboard screen with KivyMD Material Design."""
     
+    MAX_LOG_LINES = 50  # Maximum number of log lines to keep
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._progress_value = 0
+        self._log_lines = []  # Store log messages
         self._build_ui()
+    
+    def _append_log(self, message: str, color: str = "999999"):
+        """Append a message to the log view."""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self._log_lines.append(f"[color=#{color}]{timestamp}[/color] {message}")
+        
+        # Keep only the last MAX_LOG_LINES
+        if len(self._log_lines) > self.MAX_LOG_LINES:
+            self._log_lines = self._log_lines[-self.MAX_LOG_LINES:]
+        
+        # Update the label
+        self.log_label.text = "\n".join(self._log_lines)
+        
+        # Auto-scroll to bottom
+        if hasattr(self, 'log_label') and self.log_label.parent:
+            self.log_label.parent.scroll_y = 0
+    
+    def _clear_log(self):
+        """Clear the log view."""
+        self._log_lines = []
+        if hasattr(self, 'log_label'):
+            self.log_label.text = ""
     
     def _build_ui(self):
         """Build the dashboard UI with KivyMD components."""
@@ -124,7 +150,7 @@ class DashboardScreen(MDScreen):
         title_box = MDBoxLayout(orientation="vertical", spacing=dp(4))
         
         title = MDLabel(
-            text="Malicious Evasion Artifact Placer",
+            text="Malicious Evasion Artifact Placer (MEAP)",
             font_style="H4",
             theme_text_color="Custom",
             text_color=(1, 1, 1, 1),
@@ -181,20 +207,20 @@ class DashboardScreen(MDScreen):
         # ===== STATUS + UPDATE SOURCES ROW =====
         mid_row = MDBoxLayout(
             size_hint_y=None,
-            height=dp(130),
+            height=dp(200),  # Increased height for log view
             spacing=dp(16),
         )
         
-        # Status card
+        # Status card with log view
         status_card = MDCard(
             orientation="vertical",
             padding=dp(16),
-            spacing=dp(10),
+            spacing=dp(8),
             radius=[dp(12)],
             md_bg_color=(0.071, 0.129, 0.212, 1),
         )
         
-        status_header = MDBoxLayout(spacing=dp(10))
+        status_header = MDBoxLayout(spacing=dp(10), size_hint_y=None, height=dp(24))
         self.status_label = MDLabel(
             text="Status: Ready",
             font_style="Body1",
@@ -224,11 +250,33 @@ class DashboardScreen(MDScreen):
         )
         status_card.add_widget(self.progress_bar)
         
+        # Log view - scrollable area for update logs
+        log_scroll = ScrollView(
+            size_hint=(1, 1),
+            bar_width=dp(8),
+            bar_color=(0.3, 0.5, 0.8, 0.9),
+            bar_inactive_color=(0.3, 0.5, 0.8, 0.4),
+            scroll_type=['bars', 'content'],
+        )
+        self.log_label = MDLabel(
+            text="",
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.7, 0.75, 0.8, 1),
+            size_hint_y=None,
+            markup=True,
+        )
+        self.log_label.bind(texture_size=lambda inst, val: setattr(inst, 'height', val[1]))
+        log_scroll.add_widget(self.log_label)
+        status_card.add_widget(log_scroll)
+        
         self.update_label = MDLabel(
             text="Last update: Never",
             font_style="Caption",
             theme_text_color="Custom",
             text_color=(0.604, 0.627, 0.651, 1),
+            size_hint_y=None,
+            height=dp(20),
         )
         status_card.add_widget(self.update_label)
         
@@ -253,26 +301,44 @@ class DashboardScreen(MDScreen):
         )
         sources_card.add_widget(sources_title)
         
-        os_row = MDBoxLayout(spacing=dp(8))
+        os_row = MDBoxLayout(
+            spacing=dp(12),
+            size_hint_y=None,
+            height=dp(40),
+            padding=[0, dp(8), 0, 0],
+        )
         self.os_checkboxes = {}
         
         for os_name in ["Android", "Windows", "Linux", "macOS"]:
-            os_container = MDBoxLayout(spacing=dp(4))
+            # Container with vertical centering
+            os_container = MDBoxLayout(
+                spacing=dp(2),
+                size_hint_x=None,
+                width=dp(95),  # Wider to fit "Windows"
+            )
             
             cb = MDCheckbox(
                 active=True,
                 size_hint=(None, None),
-                size=(dp(28), dp(28)),
-                color_active=(0.102, 0.451, 0.91, 1),
+                size=(dp(24), dp(24)),
+                pos_hint={"center_y": 0.5},
+                checkbox_icon_normal="checkbox-blank-outline",
+                checkbox_icon_down="checkbox-marked",
             )
+            # Set white color for the checkbox icon
+            cb.color = (1, 1, 1, 1)  # White
+            
             self.os_checkboxes[os_name.lower()] = cb
             os_container.add_widget(cb)
             
             os_label = MDLabel(
                 text=os_name,
-                font_style="Caption",
+                font_style="Body2",
                 theme_text_color="Custom",
                 text_color=(0.91, 0.918, 0.929, 1),
+                valign="center",
+                size_hint_x=None,
+                width=dp(65),  # Wider to fit all OS names
             )
             os_container.add_widget(os_label)
             os_row.add_widget(os_container)
@@ -408,7 +474,11 @@ class DashboardScreen(MDScreen):
             self.status_label.text_color = (0.102, 0.451, 0.91, 1)  # Blue
             self._set_progress(progress.percent)
             
+            # Log the progress details
+            self._append_log(progress.description, "6699CC")
+            
             if progress.artifacts_found > 0:
+                self._append_log(f"Found {progress.artifacts_found} new artifacts", "33CC66")
                 self._refresh_stats()
         
         elif progress.status == "complete":
@@ -416,6 +486,7 @@ class DashboardScreen(MDScreen):
             self.status_label.text_color = (0.204, 0.659, 0.325, 1)  # Green
             self._set_progress(100)
             self.update_label.text = f"Last update: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            self._append_log(progress.description, "33CC66")
             self._refresh_stats()
             
             Clock.schedule_once(lambda dt: self._set_progress(0), 3.0)
@@ -423,6 +494,7 @@ class DashboardScreen(MDScreen):
         elif progress.status == "error":
             self.status_label.text = f"Status: {progress.description}"
             self.status_label.text_color = (0.918, 0.263, 0.208, 1)  # Red
+            self._append_log(f"Error: {progress.description}", "CC3333")
             self._set_progress(0)
     
     def _refresh_stats(self):
@@ -455,7 +527,12 @@ class DashboardScreen(MDScreen):
         if not selected_os:
             self.status_label.text = "Status: Select at least one OS"
             self.status_label.text_color = (0.984, 0.737, 0.016, 1)  # Yellow
+            self._append_log("No OS selected for update", "CCCC33")
             return
+        
+        # Clear log and show start message
+        self._clear_log()
+        self._append_log(f"Starting update for: {', '.join(selected_os)}", "6699CC")
         
         self.status_label.text = "Status: Starting update..."
         self.status_label.text_color = (0.102, 0.451, 0.91, 1)  # Blue

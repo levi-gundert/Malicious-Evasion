@@ -250,11 +250,12 @@ class SettingsScreen(MDScreen):
         ))
         self.samples_per_update_input = MDTextField(
             text="50",
-            hint_text="50",
-            mode="fill",
+            mode="rectangle",
             input_filter="int",
             size_hint=(None, None),
-            size=(dp(80), dp(40)),
+            size=(dp(80), dp(44)),
+            line_color_normal=(0.3, 0.5, 0.8, 1),
+            line_color_focus=(0.102, 0.451, 0.91, 1),
         )
         samples_row.add_widget(self.samples_per_update_input)
         samples_row.add_widget(MDLabel(

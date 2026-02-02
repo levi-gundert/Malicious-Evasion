@@ -813,6 +813,7 @@ class TriageClient:
         
         # Check content-length first to avoid downloading huge files
         endpoint = f"/samples/{sample_id}/{task_id}/logs/{log_file}"
+        size_known = False
         try:
             self.rate_limiter.acquire()
             head_response = self.session.head(
@@ -826,19 +827,48 @@ class TriageClient:
                     f"{self.MAX_KERNEL_LOG_SIZE / 1024 / 1024:.0f}MB limit), skipping: {sample_id}"
                 )
                 return None
+            size_known = content_length > 0
         except Exception as e:
-            # If HEAD fails, continue with GET (some servers don't support HEAD)
-            logger.debug(f"HEAD request failed, continuing with GET: {e}")
+            # If HEAD fails, continue with GET but use streaming to check size
+            logger.debug(f"HEAD request failed, will use streaming GET: {e}")
         
         try:
-            response = self._request("GET", f"/samples/{sample_id}/{task_id}/logs/{log_file}")
+            # Use thread-based timeout to handle slow/hanging downloads
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+            
+            def fetch_with_timeout():
+                """Fetch kernel logs with proper timeout handling."""
+                self.rate_limiter.acquire()
+                resp = self.session.get(
+                    f"{self.base_url}{endpoint}",
+                    timeout=(5, 10),  # (connect, read) timeouts
+                )
+                resp.raise_for_status()
+                return resp.text
+            
+            # Use thread pool with hard timeout - this actually kills hung downloads
+            max_download_time = 15  # 15 seconds max
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fetch_with_timeout)
+                try:
+                    text = future.result(timeout=max_download_time)
+                    logger.debug(f"Downloaded kernel logs for {sample_id}")
+                except FuturesTimeoutError:
+                    logger.warning(
+                        f"Kernel logs download timeout ({max_download_time}s), skipping: {sample_id}"
+                    )
+                    future.cancel()
+                    return None
+            
+            # Parse the response
+            text = text.strip()
+            if not text:
+                return None
+            
             try:
-                data = response.json()
+                data = json.loads(text)
             except ValueError:
                 # Some kernel logs are NDJSON (one JSON object per line)
-                text = (response.text or "").strip()
-                if not text:
-                    return None
                 entries = []
                 for line in text.splitlines():
                     line = line.strip()

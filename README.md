@@ -1,8 +1,18 @@
-# Malicious Evasion Artifact Placer
+# Malicious Evasion Artifact Placer (MEAP)
 
 A tool for extracting anti-analysis and evasion artifacts from malware behavioral reports and placing them on systems to mimic sandboxes that cause malware to terminate.
 
-![Dashboard Screenshot](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/dashboard.png)
+
+## Screenshots
+
+| Browse Artifacts | Place Artifact |
+|:---:|:---:|
+| ![Browse](docs/screenshots/browse_artifacts.png) | ![Place](docs/screenshots/place_artifact.png) |
+
+### Extraction Patterns by OS
+
+![Extractor Patterns](docs/screenshots/extractors_patterns.png)
 
 ## Disclaimer
 

@@ -717,15 +717,18 @@ class TriageClient:
         logger.debug(f"Fetching sample: {sample_id}")
         return self._get_json(f"/samples/{sample_id}")
     
-    def get_overview(self, sample_id: str) -> dict[str, Any]:
+    # Maximum time for overview download (seconds) - usually fast but protect against hangs
+    MAX_OVERVIEW_TIME = 15
+    
+    def get_overview(self, sample_id: str) -> dict[str, Any] | None:
         """
-        Get sample overview (detailed analysis summary).
+        Get sample overview (detailed analysis summary) with timeout protection.
         
         Args:
             sample_id: Sample ID
             
         Returns:
-            Overview dict
+            Overview dict, or None if timeout/error
         """
         # Check cache first
         if self.cache:
@@ -735,28 +738,54 @@ class TriageClient:
                 return cached
         
         logger.debug(f"Fetching overview: {sample_id}")
-        data = self._get_json(f"/samples/{sample_id}/overview.json")
         
-        # Store in cache
-        if self.cache and data:
-            self.cache.set_overview(sample_id, data)
+        # Use thread-based timeout to prevent hangs
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
         
-        return data
+        def fetch_with_timeout():
+            return self._get_json(f"/samples/{sample_id}/overview.json")
+        
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fetch_with_timeout)
+                try:
+                    data = future.result(timeout=self.MAX_OVERVIEW_TIME)
+                except FuturesTimeoutError:
+                    logger.warning(
+                        f"Overview timeout ({self.MAX_OVERVIEW_TIME}s), skipping: {sample_id}"
+                    )
+                    future.cancel()
+                    return None
+            
+            # Store in cache
+            if self.cache and data:
+                self.cache.set_overview(sample_id, data)
+            
+            return data
+        except NotFoundError:
+            logger.debug(f"Overview not found: {sample_id}")
+            return None
+        except TriageAPIError as e:
+            logger.warning(f"Failed to get overview for {sample_id}: {e}")
+            return None
+    
+    # Maximum time for behavioral report download (seconds)
+    MAX_BEHAVIORAL_REPORT_TIME = 20
     
     def get_behavioral_report(
         self,
         sample_id: str,
         task_id: str = "behavioral1",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """
-        Get behavioral analysis report.
+        Get behavioral analysis report with timeout protection.
         
         Args:
             sample_id: Sample ID
             task_id: Task ID (default: behavioral1)
             
         Returns:
-            Behavioral report dict
+            Behavioral report dict, or None if timeout/error
         """
         # Check cache first
         if self.cache:
@@ -766,13 +795,38 @@ class TriageClient:
                 return cached
         
         logger.debug(f"Fetching behavioral report: {sample_id}/{task_id}")
-        data = self._get_json(f"/samples/{sample_id}/{task_id}/report_triage.json")
         
-        # Store in cache
-        if self.cache and data:
-            self.cache.set_behavioral(sample_id, task_id, data)
+        # Use thread-based timeout to handle slow/hanging downloads
+        # Some behavioral reports are very large and can hang the update
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
         
-        return data
+        def fetch_with_timeout():
+            """Fetch behavioral report with proper timeout."""
+            return self._get_json(f"/samples/{sample_id}/{task_id}/report_triage.json")
+        
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fetch_with_timeout)
+                try:
+                    data = future.result(timeout=self.MAX_BEHAVIORAL_REPORT_TIME)
+                except FuturesTimeoutError:
+                    logger.warning(
+                        f"Behavioral report timeout ({self.MAX_BEHAVIORAL_REPORT_TIME}s), skipping: {sample_id}/{task_id}"
+                    )
+                    future.cancel()
+                    return None
+            
+            # Store in cache
+            if self.cache and data:
+                self.cache.set_behavioral(sample_id, task_id, data)
+            
+            return data
+        except NotFoundError:
+            logger.debug(f"Behavioral report not found: {sample_id}/{task_id}")
+            return None
+        except TriageAPIError as e:
+            logger.warning(f"Failed to get behavioral report for {sample_id}: {e}")
+            return None
     
     # Maximum size for kernel logs (100MB) - larger files cause memory/performance issues
     MAX_KERNEL_LOG_SIZE = 100 * 1024 * 1024  # 100MB
@@ -925,11 +979,12 @@ class TriageClient:
             "kernel_logs": None,
         }
         
-        # Fetch overview
-        try:
-            result["overview"] = self.get_overview(sample_id)
-        except TriageAPIError as e:
-            logger.warning(f"Failed to get overview: {e}")
+        # Fetch overview - now handles timeout internally and returns None on failure
+        result["overview"] = self.get_overview(sample_id)
+        
+        # If overview failed (timeout or error), we can't proceed
+        if result["overview"] is None:
+            logger.warning(f"Could not fetch overview for {sample_id}, skipping")
             return result
         
         # Detect OS from overview (or use target_os if provided)

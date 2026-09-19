@@ -12,13 +12,23 @@ import json
 import logging
 import os
 import sqlite3
+import threading
+from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from extractor.records import EXTRACTOR_VERSION
 
-from kivy.app import App
 
 logger = logging.getLogger(__name__)
+
+
+def serialized(method):
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return call
 
 
 class ArtifactDatabase:
@@ -40,13 +50,19 @@ class ArtifactDatabase:
             db_path: Path to SQLite database file.
                     If None, uses app data directory.
         """
+        self._lock = threading.RLock()
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
     
+    @serialized
     def initialize(self):
         """Initialize the database connection and schema."""
         if self.db_path is None:
-            app = App.get_running_app()
+            try:
+                from kivy.app import App
+                app = App.get_running_app()
+            except ImportError:
+                app = None
             if app:
                 data_dir = app.get_data_dir()
             else:
@@ -62,7 +78,25 @@ class ArtifactDatabase:
         
         self._create_schema()
         self._seed_initial_data()
+        self._load_bundled_catalog()
     
+    @serialized
+    def _load_bundled_catalog(self):
+        from extractor.catalog import load_catalog
+        from extractor.records import artifact_record
+        try:
+            catalog = load_catalog()
+            for recipe in catalog["recipes"]:
+                record = artifact_record(recipe["artifact"])
+                existing = self.get_artifact_by_id(record["id"])
+                if existing:
+                    self.update_artifact(record["id"], {"deception": record["deception"]})
+                else:
+                    self.add_artifact(record)
+        except ValueError:
+            logger.warning("Bundled catalog expired or invalid; candidates were not imported")
+
+    @serialized
     def _create_schema(self):
         """Create database tables if they don't exist."""
         cursor = self.conn.cursor()
@@ -153,6 +187,7 @@ class ArtifactDatabase:
         self.conn.commit()
         logger.debug("Database schema created")
     
+    @serialized
     def _migrate_schema(self, cursor):
         """Add new columns to existing databases."""
         # Check existing columns
@@ -166,6 +201,9 @@ class ArtifactDatabase:
             ("source_sha256", "TEXT"),
             ("source_sample_id", "TEXT"),
             ("triage_url", "TEXT"),
+            ("deception", "TEXT DEFAULT '{}'"),
+            ("provenance_json", "TEXT DEFAULT '{}'"),
+            ("validation_status", "TEXT DEFAULT 'candidate'"),
         ]
         
         for col_name, col_type in new_columns:
@@ -173,6 +211,29 @@ class ArtifactDatabase:
                 logger.debug(f"Adding column {col_name} to artifacts table")
                 cursor.execute(f"ALTER TABLE artifacts ADD COLUMN {col_name} {col_type}")
     
+        cursor.execute("PRAGMA table_info(placements)")
+        if "operation_id" not in {r[1] for r in cursor.fetchall()}:
+            cursor.execute("ALTER TABLE placements ADD COLUMN operation_id TEXT")
+        cursor.execute("PRAGMA table_info(processed_samples)")
+        if "extractor_version" not in {r[1] for r in cursor.fetchall()}:
+            cursor.execute("ALTER TABLE processed_samples ADD COLUMN extractor_version TEXT DEFAULT '1'")
+        cursor.execute("CREATE TABLE IF NOT EXISTS artifact_observations (artifact_id TEXT NOT NULL, sample_key TEXT NOT NULL, report_id TEXT NOT NULL, task_id TEXT NOT NULL, observed_at TEXT, families TEXT NOT NULL, evidence TEXT NOT NULL, PRIMARY KEY(artifact_id,sample_key,report_id,task_id))")
+        cursor.execute("CREATE TABLE IF NOT EXISTS legacy_artifact_records (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
+        from extractor.models.id import artifact_id as canonical_id
+        rows = cursor.execute("SELECT * FROM artifacts").fetchall()
+        for row in rows:
+            record = dict(row)
+            new_id = canonical_id(record["os"], record["artifact_type"], record["value"])
+            if new_id == record["id"]:
+                continue
+            cursor.execute("INSERT OR IGNORE INTO legacy_artifact_records VALUES(?,?)", (record["id"], json.dumps(record)))
+            cursor.execute("UPDATE placements SET artifact_id=? WHERE artifact_id=?", (new_id, record["id"]))
+            if cursor.execute("SELECT 1 FROM artifacts WHERE id=?", (new_id,)).fetchone():
+                cursor.execute("DELETE FROM artifacts WHERE id=?", (record["id"],))
+            else:
+                cursor.execute("UPDATE artifacts SET id=? WHERE id=?", (new_id, record["id"]))
+
+    @serialized
     def _seed_initial_data(self):
         """Seed database with initial artifacts if empty."""
         cursor = self.conn.cursor()
@@ -193,6 +254,7 @@ class ArtifactDatabase:
         if cursor.fetchone()[0] == 0:
             self._seed_common_artifacts()
     
+    @serialized
     def _import_from_extractor_output(self):
         """Import artifacts from extractor output files."""
         # Check for output/artifacts.json
@@ -221,35 +283,18 @@ class ArtifactDatabase:
         except Exception as e:
             logger.error(f"Failed to import artifacts: {e}")
     
+    @serialized
     def _import_artifact(self, artifact: dict, os_type: str):
         """Import a single artifact from extractor format."""
-        cursor = self.conn.cursor()
-        
-        # Determine privilege level based on path/value
-        value = artifact.get("match_criteria", {}).get("value", "")
-        privilege = self._determine_privilege_level(os_type, value)
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO artifacts 
-            (id, os, artifact_type, category, value, match_type, case_sensitive,
-             confidence, privilege_level, description, sample_count, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            artifact.get("id"),
-            os_type,
-            artifact.get("artifact_type", "file"),
-            artifact.get("category", "unknown"),
-            value,
-            artifact.get("match_criteria", {}).get("type", "exact"),
-            1 if artifact.get("match_criteria", {}).get("case_sensitive", True) else 0,
-            artifact.get("provenance", {}).get("confidence", 0.5),
-            privilege,
-            artifact.get("metadata", {}).get("description", ""),
-            artifact.get("provenance", {}).get("sample_count", 1),
-            artifact.get("metadata", {}).get("first_seen"),
-            artifact.get("metadata", {}).get("last_seen"),
-        ))
-    
+        from extractor.records import artifact_record
+        record = artifact_record(artifact)
+        if not self.get_artifact_by_id(record["id"]):
+            self.add_artifact(record)
+        provenance = artifact.get("provenance", {})
+        for sample_hash in provenance.get("sample_hashes", []):
+            self.record_observation(record["id"], sample_hash, "import", "unknown", record.get("last_seen"), provenance.get("families", []), {"source": "JSON import; report mapping unavailable"})
+
+    @serialized
     def _determine_privilege_level(self, os_type: str, value: str) -> str:
         """
         Determine the privilege level required to place an artifact.
@@ -298,6 +343,7 @@ class ArtifactDatabase:
         
         return "user"  # Fallback
     
+    @serialized
     def _seed_common_artifacts(self):
         """Seed database with common evasion artifacts."""
         logger.info("Seeding common evasion artifacts...")
@@ -359,25 +405,23 @@ class ArtifactDatabase:
         self.conn.commit()
         logger.info("Seeded common artifacts")
     
+    @serialized
     def _insert_artifact(self, os: str, artifact_type: str, category: str, 
                          value: str, description: str = "", 
                          privilege_level: str = "user",
-                         confidence: float = 0.5):
+                         confidence: float = 0.0):
         """Insert a single artifact."""
-        import hashlib
-        
-        # Generate deterministic ID
-        hash_input = f"{os}-{artifact_type}-{value}"
-        hash_value = hashlib.sha256(hash_input.encode()).hexdigest()[:8]
-        artifact_id = f"art-{os}-{artifact_type}-{hash_value}"
-        
+        from extractor.models.id import artifact_id as canonical_id
+        artifact_id = canonical_id(os, artifact_type, value)
+
         cursor = self.conn.cursor()
         cursor.execute("""
             INSERT OR IGNORE INTO artifacts 
-            (id, os, artifact_type, category, value, privilege_level, description, confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, os, artifact_type, category, value, privilege_level, description, confidence, sample_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (artifact_id, os, artifact_type, category, value, privilege_level, description, confidence))
     
+    @serialized
     def close(self):
         """Close the database connection."""
         if self.conn:
@@ -389,12 +433,14 @@ class ArtifactDatabase:
     # Artifact CRUD
     # =========================================================================
     
+    @serialized
     def get_artifact_count(self) -> int:
         """Get total artifact count."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM artifacts")
         return cursor.fetchone()[0]
     
+    @serialized
     def get_artifacts(
         self,
         os_type: Optional[str] = None,
@@ -443,6 +489,7 @@ class ArtifactDatabase:
         
         return [dict(row) for row in cursor.fetchall()]
     
+    @serialized
     def get_artifact_by_id(self, artifact_id: str) -> Optional[Dict[str, Any]]:
         """Get a single artifact by ID."""
         cursor = self.conn.cursor()
@@ -450,42 +497,46 @@ class ArtifactDatabase:
         row = cursor.fetchone()
         return dict(row) if row else None
     
+    @serialized
     def add_artifact(self, artifact: Dict[str, Any]) -> bool:
         """Add a new artifact."""
+        fields = ("id", "os", "artifact_type", "category", "value", "match_type", "case_sensitive", "confidence", "privilege_level", "description", "evasion_purpose", "sample_count", "source_sha1", "source_sha256", "source_sample_id", "triage_url", "first_seen", "last_seen", "deception", "provenance_json", "validation_status")
+        values = {key: artifact[key] for key in fields if key in artifact}
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                INSERT INTO artifacts 
-                (id, os, artifact_type, category, value, match_type, case_sensitive,
-                 confidence, privilege_level, description, evasion_purpose, sample_count,
-                 source_sha1, source_sha256, source_sample_id, triage_url, first_seen, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                artifact.get("id"),
-                artifact.get("os"),
-                artifact.get("artifact_type"),
-                artifact.get("category"),
-                artifact.get("value"),
-                artifact.get("match_type", "exact"),
-                1 if artifact.get("case_sensitive", True) else 0,
-                artifact.get("confidence", 0.5),
-                artifact.get("privilege_level", "user"),
-                artifact.get("description", ""),
-                artifact.get("evasion_purpose", ""),
-                artifact.get("sample_count", 1),
-                artifact.get("source_sha1", ""),
-                artifact.get("source_sha256", ""),
-                artifact.get("source_sample_id", ""),
-                artifact.get("triage_url", ""),
-                artifact.get("first_seen"),
-                artifact.get("last_seen"),
-            ))
+            columns = ",".join(values)
+            placeholders = ",".join("?" for _ in values)
+            self.conn.execute(f"INSERT INTO artifacts ({columns}) VALUES ({placeholders})", list(values.values()))
             self.conn.commit()
             return True
-        except Exception as e:
-            logger.error(f"Failed to add artifact: {e}")
+        except sqlite3.IntegrityError:
             return False
-    
+
+    @serialized
+    def record_observation(self, artifact_id, sample_key, report_id, task_id, observed_at, families, evidence):
+        if not sample_key:
+            return
+        from extractor.aggregation.scorer import calculate_confidence
+        self.conn.execute("INSERT OR REPLACE INTO artifact_observations VALUES(?,?,?,?,?,?,?)", (artifact_id, sample_key, report_id, task_id, observed_at, json.dumps(families), json.dumps(evidence)))
+        rows = self.conn.execute("SELECT * FROM artifact_observations WHERE artifact_id=?", (artifact_id,)).fetchall()
+        samples = {r["sample_key"] for r in rows}
+        family_set = {f for r in rows for f in json.loads(r["families"])}
+        times = []
+        for row in rows:
+            if row["observed_at"]:
+                try:
+                    date = datetime.fromisoformat(row["observed_at"].replace("Z", "+00:00"))
+                    times.append(date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date)
+                except ValueError:
+                    pass
+        first, last = (min(times), max(times)) if times else (None, None)
+        self.conn.execute("UPDATE artifacts SET sample_count=?, confidence=?, first_seen=?, last_seen=? WHERE id=?", (len(samples), calculate_confidence(len(samples), len(family_set), last), first.isoformat() if first else None, last.isoformat() if last else None, artifact_id))
+        self.conn.commit()
+
+    @serialized
+    def get_observations(self, artifact_id):
+        return [dict(row) for row in self.conn.execute("SELECT * FROM artifact_observations WHERE artifact_id=?", (artifact_id,))]
+
+    @serialized
     def update_artifact(self, artifact_id: str, updates: Dict[str, Any]) -> bool:
         """Update an existing artifact."""
         try:
@@ -494,6 +545,9 @@ class ArtifactDatabase:
             
             for key, value in updates.items():
                 if key != "id":
+                    allowed = {r[1] for r in self.conn.execute("PRAGMA table_info(artifacts)")}
+                    if key not in allowed:
+                        raise ValueError("Unknown artifact column")
                     set_clauses.append(f"{key} = ?")
                     params.append(value)
             
@@ -515,6 +569,7 @@ class ArtifactDatabase:
     # Statistics
     # =========================================================================
     
+    @serialized
     def get_statistics(self) -> Dict[str, Any]:
         """Get database statistics for dashboard."""
         cursor = self.conn.cursor()
@@ -552,15 +607,17 @@ class ArtifactDatabase:
     # Placement History
     # =========================================================================
     
-    def log_placement(self, artifact: Dict[str, Any], placed_path: Optional[str] = None):
+    @serialized
+    def log_placement(self, artifact: Dict[str, Any], placed_path: Optional[str] = None, operation_id=None):
         """Log an artifact placement."""
         cursor = self.conn.cursor()
         cursor.execute("""
-            INSERT INTO placements (artifact_id, placed_path, status)
-            VALUES (?, ?, 'placed')
-        """, (artifact.get("id"), placed_path or artifact.get("value")))
+            INSERT INTO placements (artifact_id, placed_path, status, operation_id)
+            SELECT ?, ?, 'placed', ? WHERE NOT EXISTS (SELECT 1 FROM placements WHERE operation_id=?)
+        """, (artifact.get("id"), placed_path or artifact.get("value"), operation_id, operation_id))
         self.conn.commit()
     
+    @serialized
     def get_placed_artifacts(self) -> List[Dict[str, Any]]:
         """Get all placed artifacts."""
         cursor = self.conn.cursor()
@@ -573,6 +630,7 @@ class ArtifactDatabase:
         """)
         return [dict(row) for row in cursor.fetchall()]
     
+    @serialized
     def mark_placement_removed(self, placement_id: int):
         """Mark a placement as removed."""
         cursor = self.conn.cursor()
@@ -583,16 +641,24 @@ class ArtifactDatabase:
         """, (placement_id,))
         self.conn.commit()
     
+    @serialized
+    def sync_placement_status(self, records):
+        for record in records:
+            self.conn.execute("UPDATE placements SET status=? WHERE operation_id=?", ("placed" if record["status"] == "verified" else record["status"], record["id"]))
+        self.conn.commit()
+
+    @serialized
     def clear_placed_log(self):
         """Clear all placement history."""
         cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM placements")
+        cursor.execute("DELETE FROM placements WHERE status = 'removed'")
         self.conn.commit()
     
     # =========================================================================
     # Settings
     # =========================================================================
     
+    @serialized
     def get_settings(self) -> Dict[str, Any]:
         """Get all settings."""
         cursor = self.conn.cursor()
@@ -607,6 +673,7 @@ class ArtifactDatabase:
         
         return settings
     
+    @serialized
     def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a single setting."""
         cursor = self.conn.cursor()
@@ -621,11 +688,14 @@ class ArtifactDatabase:
         
         return default
     
+    @serialized
     def save_settings(self, settings: Dict[str, Any]):
         """Save multiple settings."""
         cursor = self.conn.cursor()
         
         for key, value in settings.items():
+            if key == "api_key":
+                raise ValueError("API keys must use CredentialStore")
             json_value = json.dumps(value) if not isinstance(value, str) else value
             cursor.execute("""
                 INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)
@@ -633,6 +703,7 @@ class ArtifactDatabase:
         
         self.conn.commit()
     
+    @serialized
     def save_setting(self, key: str, value: Any):
         """Save a single setting."""
         self.save_settings({key: value})
@@ -641,10 +712,14 @@ class ArtifactDatabase:
     # Data Management
     # =========================================================================
     
+    @serialized
     def clear_all(self):
         """Clear all data from the database."""
         cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM placements")
+        if cursor.execute("SELECT 1 FROM placements WHERE status != 'removed' LIMIT 1").fetchone():
+            raise ValueError("Remove or review active/legacy placements before clearing data")
+        cursor.execute("DELETE FROM placements WHERE status = 'removed'")
+        cursor.execute("DELETE FROM artifact_observations")
         cursor.execute("DELETE FROM artifacts")
         cursor.execute("DELETE FROM settings")
         cursor.execute("DELETE FROM updates")
@@ -656,6 +731,7 @@ class ArtifactDatabase:
     # Processed Samples Tracking
     # =========================================================================
     
+    @serialized
     def is_sample_processed(self, sample_id: str) -> bool:
         """
         Check if a sample has already been processed.
@@ -668,13 +744,14 @@ class ArtifactDatabase:
         """
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT 1 FROM processed_samples WHERE sample_id = ?",
-            (sample_id,)
+            "SELECT 1 FROM processed_samples WHERE sample_id = ? AND extractor_version = ?",
+            (sample_id, EXTRACTOR_VERSION)
         )
         result = cursor.fetchone() is not None
         logger.debug(f"Sample {sample_id} already processed: {result}")
         return result
     
+    @serialized
     def mark_sample_processed(
         self,
         sample_id: str,
@@ -700,9 +777,9 @@ class ArtifactDatabase:
             cursor = self.conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_samples 
-                (sample_id, os_type, processed_at, artifacts_extracted, score, sha256)
-                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
-            """, (sample_id, os_type, artifacts_extracted, score, sha256))
+                (sample_id, os_type, processed_at, artifacts_extracted, score, sha256, extractor_version)
+                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+            """, (sample_id, os_type, artifacts_extracted, score, sha256, EXTRACTOR_VERSION))
             self.conn.commit()
             logger.debug(f"Marked sample {sample_id} as processed ({artifacts_extracted} artifacts)")
             return True
@@ -710,6 +787,7 @@ class ArtifactDatabase:
             logger.error(f"Failed to mark sample as processed: {e}")
             return False
     
+    @serialized
     def get_processed_sample_count(self, os_type: Optional[str] = None) -> int:
         """
         Get count of processed samples, optionally filtered by OS.
@@ -730,6 +808,7 @@ class ArtifactDatabase:
             cursor.execute("SELECT COUNT(*) FROM processed_samples")
         return cursor.fetchone()[0]
     
+    @serialized
     def clear_processed_samples(self, os_type: Optional[str] = None):
         """
         Clear processed samples history to force re-analysis.

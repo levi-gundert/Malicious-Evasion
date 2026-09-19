@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "catalog_version": 1,
+  "created_at": "2026-09-19T00:00:00Z",
+  "expires_at": "2026-12-19T00:00:00Z",
+  "description": "Author-curated existence-check candidates. No malware efficacy is claimed. These records contain no redistributed Triage report data.",
+  "recipes": [
+    {
+      "name": "vmware-software-key",
+      "artifact": {
+        "os": "windows", "artifact_type": "registry", "category": "vm_registry",
+        "match_criteria": {"type": "exact", "value": "HKLM\\SOFTWARE\\VMware, Inc."},
+        "metadata": {"description": "Creates a VMware-named key for an exact key-existence check only. Does not emulate hardware, drivers, or installed tools."},
+        "provenance": {"sample_count": 0, "confidence": 0},
+        "deception": {"plant_as": "registry_key", "validation_status": "candidate", "retest_after": "2026-12-19T00:00:00Z", "notes": "Requires administrator. Preserves any existing VMware key. May affect software that infers installation from registry names."}
+      },
+      "dependencies": [],
+      "efficacy": "untested"
+    },
+    {
+      "name": "vmware-tools-key",
+      "artifact": {
+        "os": "windows", "artifact_type": "registry", "category": "vm_registry",
+        "match_criteria": {"type": "exact", "value": "HKLM\\SOFTWARE\\VMware, Inc.\\VMware Tools"},
+        "metadata": {"description": "Exact key-existence candidate. Registry value comparisons and WMI queries are not satisfied."},
+        "provenance": {"sample_count": 0, "confidence": 0},
+        "deception": {"plant_as": "registry_key", "validation_status": "candidate", "retest_after": "2026-12-19T00:00:00Z", "notes": "Requires administrator and an existing parent. Preserves installed VMware Tools. Review compatibility before use."}
+      },
+      "dependencies": ["vmware-software-key"],
+      "efficacy": "untested"
+    }
+  ]
+}

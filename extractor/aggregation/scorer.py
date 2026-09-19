@@ -1,5 +1,5 @@
 """
-Confidence scoring for artifacts.
+Observation-strength scoring; this is not protection efficacy.
 
 Calculates confidence based on:
 - Sample count (more samples = higher confidence)
@@ -43,10 +43,13 @@ def calculate_confidence(
     Returns:
         Confidence score between 0.0 and 1.0
     """
-    # Base score from sample count (max 0.5 at 10+ samples)
+    if sample_count <= 0:
+        return 0.0
+
+    # Base score from sample count (max 0.5 at 5+ samples)
     base_score = min(sample_count / 10.0, 0.5)
     
-    # Family diversity bonus (max 0.3 at 5+ families)
+    # Family diversity bonus (max 0.3 at 2+ families)
     family_bonus = min(unique_families / 5.0, 0.3)
     
     # Recency bonus
@@ -59,7 +62,7 @@ def calculate_confidence(
             last_seen = last_seen.replace(tzinfo=timezone.utc)
         
         age = now - last_seen
-        if age <= timedelta(days=recency_days):
+        if timedelta(0) <= age <= timedelta(days=recency_days):
             recency_bonus = 0.2  # Recent sighting
     
     # Calculate total confidence

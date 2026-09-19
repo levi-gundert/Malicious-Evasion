@@ -162,8 +162,8 @@ class BaseExtractor(ABC):
             metadata=Metadata(
                 description=description,
                 evasion_purpose=evasion_purpose,
-                first_seen=now,
-                last_seen=now,
+                first_seen=None,
+                last_seen=None,
             ),
             provenance=provenance,
             deception=Deception(

@@ -15,8 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any, Iterator
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +165,12 @@ def infer_os_from_sample(sample_data: dict[str, Any]) -> str | None:
                     logger.debug(f"infer_os_from_sample: found OS from task.platform: {os_type}")
                     return os_type
     
+    for target in sample_data.get("targets", []):
+        if isinstance(target, dict):
+            detected = infer_os_from_platform(target.get("platform", ""))
+            if detected:
+                return detected
+
     # Strategy 2: Check target filename extension
     # Try multiple locations where filename might be
     # NOTE: Search results have 'filename' key directly, overview has 'target'/'sample.target'
@@ -251,12 +255,14 @@ class RateLimiter:
     _tokens: float = field(default=20.0, init=False)
     _last_update: float = field(default_factory=time.time, init=False)
     
-    def acquire(self) -> None:
+    def acquire(self, timeout: float | None = None) -> None:
         """
         Acquire a token, waiting if necessary.
         
         Blocks until a token is available.
         """
+        if self.requests_per_minute <= 0:
+            raise ValueError("requests_per_minute must be positive")
         now = time.time()
         elapsed = now - self._last_update
         
@@ -268,6 +274,8 @@ class RateLimiter:
         if self._tokens < 1:
             # Wait for a token
             wait_time = (1 - self._tokens) * (60.0 / self.requests_per_minute)
+            if timeout is not None and wait_time >= timeout:
+                raise TriageAPIError("Rate-limit wait exceeds request deadline")
             logger.debug(f"Rate limiting: waiting {wait_time:.2f}s")
             time.sleep(wait_time)
             self._tokens = 1
@@ -347,6 +355,7 @@ class TriageClient:
             logger.debug("Using public cloud API")
         
         self.timeout = timeout
+        self.max_retries = max_retries
         
         # Rate limiter
         self.rate_limiter = RateLimiter(requests_per_minute=requests_per_minute)
@@ -368,17 +377,6 @@ class TriageClient:
             "Accept": "application/json",
             "User-Agent": "TriageArtifactExtractor/1.0",
         })
-        
-        # Configure retries for transient errors
-        retry_strategy = Retry(
-            total=max_retries,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
         
         logger.info(f"Triage client initialized: {self.base_url}")
     
@@ -405,25 +403,24 @@ class TriageClient:
             TriageAPIError: On API error
         """
         # Apply rate limiting
-        self.rate_limiter.acquire()
-        
+        started = time.monotonic()
+        budget = kwargs.pop("timeout", self.timeout)
+        self.rate_limiter.acquire(timeout=budget)
+        budget -= time.monotonic() - started
+        max_bytes = kwargs.pop("max_bytes", 20 * 1024 * 1024)
         url = f"{self.base_url}{endpoint}"
         
         logger.debug(f"{method} {url}")
         
         try:
-            response = self.session.request(
-                method,
-                url,
-                params=params,
-                timeout=self.timeout,
-                **kwargs,
-            )
+            from extractor.triage.transport import bounded_request
+            response = bounded_request(method, url, dict(self.session.headers), params=params,
+                                       timeout=budget, retries=self.max_retries, max_bytes=max_bytes)
         except requests.exceptions.Timeout:
-            raise TriageAPIError(f"Request timed out: {url}")
-        except requests.exceptions.ConnectionError as e:
-            raise TriageAPIError(f"Connection error: {e}")
-        
+            raise TriageAPIError("Total request deadline exceeded") from None
+        except (requests.RequestException, ValueError):
+            raise TriageAPIError("Bounded API request failed") from None
+
         # Handle errors
         if response.status_code == 401:
             raise AuthenticationError(
@@ -463,9 +460,9 @@ class TriageClient:
         
         return response
     
-    def _get_json(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
+    def _get_json(self, endpoint: str, params: dict | None = None, timeout: float | None = None) -> dict[str, Any]:
         """Make a GET request and return JSON."""
-        response = self._request("GET", endpoint, params=params)
+        response = self._request("GET", endpoint, params=params, timeout=timeout or self.timeout)
         return response.json()
     
     # =========================================================================
@@ -739,24 +736,9 @@ class TriageClient:
         
         logger.debug(f"Fetching overview: {sample_id}")
         
-        # Use thread-based timeout to prevent hangs
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-        
-        def fetch_with_timeout():
-            return self._get_json(f"/samples/{sample_id}/overview.json")
-        
         try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(fetch_with_timeout)
-                try:
-                    data = future.result(timeout=self.MAX_OVERVIEW_TIME)
-                except FuturesTimeoutError:
-                    logger.warning(
-                        f"Overview timeout ({self.MAX_OVERVIEW_TIME}s), skipping: {sample_id}"
-                    )
-                    future.cancel()
-                    return None
-            
+            data = self._get_json(f"/samples/{sample_id}/overview.json", timeout=self.MAX_OVERVIEW_TIME)
+
             # Store in cache
             if self.cache and data:
                 self.cache.set_overview(sample_id, data)
@@ -796,26 +778,9 @@ class TriageClient:
         
         logger.debug(f"Fetching behavioral report: {sample_id}/{task_id}")
         
-        # Use thread-based timeout to handle slow/hanging downloads
-        # Some behavioral reports are very large and can hang the update
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-        
-        def fetch_with_timeout():
-            """Fetch behavioral report with proper timeout."""
-            return self._get_json(f"/samples/{sample_id}/{task_id}/report_triage.json")
-        
         try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(fetch_with_timeout)
-                try:
-                    data = future.result(timeout=self.MAX_BEHAVIORAL_REPORT_TIME)
-                except FuturesTimeoutError:
-                    logger.warning(
-                        f"Behavioral report timeout ({self.MAX_BEHAVIORAL_REPORT_TIME}s), skipping: {sample_id}/{task_id}"
-                    )
-                    future.cancel()
-                    return None
-            
+            data = self._get_json(f"/samples/{sample_id}/{task_id}/report_triage.json", timeout=self.MAX_BEHAVIORAL_REPORT_TIME)
+
             # Store in cache
             if self.cache and data:
                 self.cache.set_behavioral(sample_id, task_id, data)
@@ -865,55 +830,11 @@ class TriageClient:
         
         logger.debug(f"Fetching kernel logs: {sample_id}/{task_id}/logs/{log_file}")
         
-        # Check content-length first to avoid downloading huge files
         endpoint = f"/samples/{sample_id}/{task_id}/logs/{log_file}"
-        size_known = False
         try:
-            self.rate_limiter.acquire()
-            head_response = self.session.head(
-                f"{self.base_url}{endpoint}",
-                timeout=10,
-            )
-            content_length = int(head_response.headers.get("Content-Length", 0))
-            if content_length > self.MAX_KERNEL_LOG_SIZE:
-                logger.warning(
-                    f"Kernel logs too large ({content_length / 1024 / 1024:.1f}MB > "
-                    f"{self.MAX_KERNEL_LOG_SIZE / 1024 / 1024:.0f}MB limit), skipping: {sample_id}"
-                )
-                return None
-            size_known = content_length > 0
-        except Exception as e:
-            # If HEAD fails, continue with GET but use streaming to check size
-            logger.debug(f"HEAD request failed, will use streaming GET: {e}")
-        
-        try:
-            # Use thread-based timeout to handle slow/hanging downloads
-            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-            
-            def fetch_with_timeout():
-                """Fetch kernel logs with proper timeout handling."""
-                self.rate_limiter.acquire()
-                resp = self.session.get(
-                    f"{self.base_url}{endpoint}",
-                    timeout=(5, 10),  # (connect, read) timeouts
-                )
-                resp.raise_for_status()
-                return resp.text
-            
-            # Use thread pool with hard timeout - this actually kills hung downloads
-            max_download_time = 15  # 15 seconds max
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(fetch_with_timeout)
-                try:
-                    text = future.result(timeout=max_download_time)
-                    logger.debug(f"Downloaded kernel logs for {sample_id}")
-                except FuturesTimeoutError:
-                    logger.warning(
-                        f"Kernel logs download timeout ({max_download_time}s), skipping: {sample_id}"
-                    )
-                    future.cancel()
-                    return None
-            
+            response = self._request("GET", endpoint, timeout=15, max_bytes=self.MAX_KERNEL_LOG_SIZE)
+            text = response.text
+
             # Parse the response
             text = text.strip()
             if not text:
@@ -947,6 +868,10 @@ class TriageClient:
             logger.debug(f"Kernel logs not available for {sample_id}")
             return None
     
+        except TriageAPIError:
+            logger.warning("Kernel log download failed or exceeded its deadline")
+            return None
+
     # =========================================================================
     # Convenience Methods
     # =========================================================================
@@ -994,6 +919,7 @@ class TriageClient:
         # Find the correct behavioral task for the target OS
         # Multi-platform samples may have behavioral1 on Windows but behavioral7 on Linux
         task_id = self._find_behavioral_task_for_os(result["overview"], os_type)
+        result["task_id"] = task_id
         logger.debug(f"Using behavioral task {task_id} for OS {os_type}")
         
         # Fetch behavioral report from the correct task

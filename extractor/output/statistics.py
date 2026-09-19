@@ -1,60 +1,53 @@
-"""Statistics generation for extraction results."""
+"""Observation statistics, never an estimate of protection efficacy."""
 
-import logging
-from dataclasses import dataclass, field
-from typing import Any
-
-logger = logging.getLogger(__name__)
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from extractor.models.artifact import Artifact
 
 
 @dataclass
 class ExtractionStatistics:
-    """Statistics about an extraction run."""
-    
     total_samples: int = 0
     total_artifacts: int = 0
-    by_os: dict[str, int] = field(default_factory=dict)
-    by_type: dict[str, int] = field(default_factory=dict)
-    by_category: dict[str, int] = field(default_factory=dict)
+    unique_artifacts: int = 0
+    by_os: dict = field(default_factory=dict)
+    by_type: dict = field(default_factory=dict)
+    by_category: dict = field(default_factory=dict)
+    by_confidence: dict = field(
+        default_factory=lambda: {"low": 0, "medium": 0, "high": 0}
+    )
     errors: int = 0
+    extracted_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+    def to_dict(self):
+        return asdict(self)
 
 
-def generate_statistics(artifacts: dict[str, list]) -> ExtractionStatistics:
-    """
-    Generate statistics from extraction results.
-    
-    Args:
-        artifacts: Dictionary of artifacts by OS
-        
-    Returns:
-        ExtractionStatistics with counts
-    """
+def generate_statistics(artifacts):
+    values = (
+        (a for group in artifacts.values() for a in group)
+        if isinstance(artifacts, dict)
+        else artifacts
+    )
     stats = ExtractionStatistics()
-    
-    for os_type, os_artifacts in artifacts.items():
-        count = len(os_artifacts)
-        stats.by_os[os_type] = count
-        stats.total_artifacts += count
-        
-        for artifact in os_artifacts:
-            # Count by type
-            if hasattr(artifact, "artifact_type"):
-                art_type = artifact.artifact_type.value if hasattr(artifact.artifact_type, "value") else str(artifact.artifact_type)
-            elif isinstance(artifact, dict):
-                art_type = artifact.get("artifact_type", "unknown")
-            else:
-                art_type = "unknown"
-            
-            stats.by_type[art_type] = stats.by_type.get(art_type, 0) + 1
-            
-            # Count by category
-            if hasattr(artifact, "category"):
-                category = artifact.category
-            elif isinstance(artifact, dict):
-                category = artifact.get("category", "unknown")
-            else:
-                category = "unknown"
-            
-            stats.by_category[category] = stats.by_category.get(category, 0) + 1
-    
+    ids, samples = set(), set()
+    for value in values:
+        a = Artifact.model_validate(value)
+        stats.total_artifacts += 1
+        ids.add(a.id)
+        samples.update(a.provenance.sample_hashes)
+        for counts, key in (
+            (stats.by_os, a.os.value),
+            (stats.by_type, a.artifact_type.value),
+            (stats.by_category, a.category),
+        ):
+            counts[key] = counts.get(key, 0) + 1
+        score = a.provenance.confidence
+        stats.by_confidence[
+            "high" if score >= 0.8 else "medium" if score >= 0.5 else "low"
+        ] += 1
+    stats.unique_artifacts = len(ids)
+    stats.total_samples = len(samples)
     return stats

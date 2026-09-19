@@ -545,12 +545,37 @@ class DashboardScreen(MDScreen):
     
     def _remove_placed(self):
         """Remove all placed artifacts."""
-        logger.info("Remove placed artifacts requested")
-        self.status_label.text = "Status: Removing placed artifacts..."
-        self.status_label.text_color = (0.984, 0.737, 0.016, 1)  # Yellow
-        
-        Clock.schedule_once(lambda dt: self._finish_remove(), 1.0)
-    
+        app = MDApp.get_running_app()
+        if not app or not getattr(app, "placement_engine", None) or getattr(app, "placement_busy", False):
+            return
+        self._removing = True
+        app.placement_busy = True
+        self.status_label.text = "Status: Verifying ownership and removing..."
+        from threading import Thread
+        import json
+        def worker():
+            removed = 0
+            preserved = 0
+            engine = app.placement_engine
+            for row in reversed(engine.core.journal.records()):
+                if row["status"] in ("removed", "failed", "cancelled"):
+                    continue
+                ok = engine.remove_token(row["id"])
+                if not ok and ("denied" in engine.last_error.lower() or "privilege" in engine.last_error.lower()):
+                    ok = engine.remove_token(row["id"], elevate=True)
+                if ok:
+                    removed += 1
+                    app.database.sync_placement_status(engine.core.journal.records())
+                else:
+                    preserved += 1
+            def finish(dt):
+                self._removing = False
+                app.placement_busy = False
+                self._refresh_stats()
+                self.status_label.text = f"Removed: {removed}; preserved for review: {preserved}. Legacy placements need manual review."
+            Clock.schedule_once(finish, 0)
+        Thread(target=worker, daemon=True).start()
+
     def _finish_remove(self):
         """Finish the removal process."""
         self.status_label.text = "Status: Ready"

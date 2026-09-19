@@ -265,7 +265,7 @@ class PlacementScreen(MDScreen):
         footer_content.add_widget(self.summary_label)
         
         place_all_btn = MDRaisedButton(
-            text="Place All User-Space",
+            text="Review Next User Artifact",
             size_hint=(None, None),
             size=(dp(180), dp(40)),
             md_bg_color=(0.102, 0.451, 0.91, 1),
@@ -337,25 +337,32 @@ class PlacementScreen(MDScreen):
     
     def _on_place_artifact(self, artifact: dict):
         """Handle placing a single artifact."""
-        privilege = artifact.get("privilege_level", "user")
-        
-        if privilege in ("admin", "root"):
-            self._show_privilege_confirmation(artifact)
-        else:
-            self._do_place(artifact)
-    
+        app = MDApp.get_running_app()
+        try:
+            plan = app.placement_engine.plan(artifact)
+        except Exception as exc:
+            self.status_label.text = f"Unsupported: {exc}"
+            return
+        self._show_privilege_confirmation(artifact)
+
     def _show_privilege_confirmation(self, artifact: dict):
         """Show confirmation dialog for privileged artifact."""
         privilege = artifact.get("privilege_level", "admin")
         value = artifact.get("value", "Unknown")
-        display_value = value if len(value) < 60 else value[:57] + "..."
-        
+        plan = MDApp.get_running_app().placement_engine.plan(artifact)
+        display_value = plan.target
+        details = f"Operation: {plan.kind}\n"
+        if plan.kind == "registry_value":
+            details += f"Value: {plan.registry_name} ({plan.registry_type}) = {plan.registry_data}\n"
+        if plan.kind.startswith("registry"):
+            details += f"Registry view: {plan.registry_view}-bit\n"
+
         self._privilege_dialog = MDDialog(
-            title="Privilege Required",
+            title="Review placement plan",
             text=(
-                f"This artifact requires {privilege.upper()} privileges.\n\n"
-                f"Value: {display_value}\n\n"
-                f"The system will prompt you for elevation.\n"
+                f"Exact target ({privilege.upper()}):\n\n"
+                f"Target: {display_value}\n{details}\n"
+                f"Existing objects will be preserved. Efficacy is untested.\n"
                 f"Do you want to proceed?"
             ),
             buttons=[
@@ -377,7 +384,7 @@ class PlacementScreen(MDScreen):
         """Handle privilege confirmation."""
         if self._privilege_dialog:
             self._privilege_dialog.dismiss()
-        self._do_place(artifact, with_elevation=True)
+        self._do_place(artifact, with_elevation=artifact.get("privilege_level") in ("admin", "root"))
     
     def _do_place(self, artifact: dict, with_elevation: bool = False):
         """Actually place the artifact."""
@@ -385,28 +392,31 @@ class PlacementScreen(MDScreen):
         if not app:
             return
         
-        from gui.services.placement_engine import PlacementEngine
-        
-        engine = PlacementEngine(app.current_os)
-        
-        try:
+        if getattr(app, "placement_busy", False):
+            return
+        self._placing = True
+        app.placement_busy = True
+        self.status_label.text = "Placement pending..."
+        from threading import Thread
+        def worker():
+            engine = app.placement_engine
             success = engine.place_artifact(artifact, elevate=with_elevation)
-            
-            if success:
-                logger.info(f"Placed artifact: {artifact.get('value')}")
-                self.placed_artifacts.append(artifact)
-                self.artifacts_to_place.remove(artifact)
-                
-                if app.database:
-                    app.database.log_placement(artifact)
-            else:
-                logger.warning(f"Failed to place artifact: {artifact.get('value')}")
-                
-        except Exception as e:
-            logger.error(f"Error placing artifact: {e}")
-        
-        self._refresh_ui()
-    
+            message = engine.last_error
+            token = engine.last_token
+            def finish(dt):
+                self._placing = False
+                app.placement_busy = False
+                if success:
+                    self.placed_artifacts.append(artifact)
+                    if artifact in self.artifacts_to_place:
+                        self.artifacts_to_place.remove(artifact)
+                    if app.database:
+                        app.database.log_placement(artifact, operation_id=token)
+                self._refresh_ui()
+                self.status_label.text = "Placement verified; efficacy untested" if success else f"Not placed: {message}"
+            Clock.schedule_once(finish, 0)
+        Thread(target=worker, daemon=True).start()
+
     def _on_skip_artifact(self, artifact: dict):
         """Handle skipping an artifact."""
         self.skipped_artifacts.append(artifact)
@@ -418,11 +428,15 @@ class PlacementScreen(MDScreen):
         user_artifacts = [a for a in self.artifacts_to_place
                          if a.get("privilege_level", "user") == "user"]
         
-        for artifact in user_artifacts:
-            self._do_place(artifact)
+        if user_artifacts:
+            self._on_place_artifact(user_artifacts[0])
     
     def _cancel(self):
         """Cancel placement and go back."""
+        app = MDApp.get_running_app()
+        if app and getattr(app, "placement_busy", False):
+            self.status_label.text = "Wait for the pending operation to finish."
+            return
         self.artifacts_to_place = []
         self.placed_artifacts = []
         self.skipped_artifacts = []
@@ -436,6 +450,10 @@ class PlacementScreen(MDScreen):
         count = len(self.placed_artifacts)
         logger.info(f"Placement complete: {count} artifacts placed")
         
+        app = MDApp.get_running_app()
+        if app and getattr(app, "placement_busy", False):
+            self.status_label.text = "Wait for the pending operation to finish."
+            return
         self.artifacts_to_place = []
         self.placed_artifacts = []
         self.skipped_artifacts = []

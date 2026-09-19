@@ -599,5 +599,9 @@ def compare(
         raise click.ClickException(f"Compare failed: {e}")
 
 
+from extractor.placement_cli import placement
+cli.add_command(placement)
+
+
 if __name__ == "__main__":
     cli()

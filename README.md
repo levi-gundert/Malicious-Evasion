@@ -1,6 +1,6 @@
 # Malicious Evasion Artifact Placer (MEAP)
 
-A tool for extracting anti-analysis and evasion artifacts from malware behavioral reports and placing them on systems to mimic sandboxes that cause malware to terminate.
+A research tool for extracting anti-analysis checks from malware reports and placing reversible decoy candidates. An observed check does not establish that a decoy prevents infection; efficacy requires controlled validation.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -61,7 +61,7 @@ The Malicious Evasion Artifact Placer extracts evasion techniques from [Hatching
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/malicious-evasion.git
+git clone https://github.com/levi-gundert/Malicious-Evasion.git
 cd malicious-evasion
 
 # Create virtual environment
@@ -116,7 +116,7 @@ python -m gui.main
 Extract artifacts from local fixtures:
 
 ```bash
-python -m extractor.cli extract --input tests/fixtures --os windows
+python -m extractor.cli extract --os windows
 ```
 
 Extract from Triage API:
@@ -176,10 +176,10 @@ Malicious Evasion/
 
 This tool is designed for security professionals to test detection capabilities. Before making this project public or using in any environment:
 
-1. **No Hardcoded Secrets**: API keys are loaded from environment variables only
+1. **No Hardcoded Secrets**: Desktop GUI keys use the OS credential store, with a session-only fallback; CLI keys can use environment variables
 2. **Isolated Testing**: Always test in VMs or sandboxed environments first
 3. **Privilege Awareness**: The tool clearly indicates which artifacts require admin privileges
-4. **Reversibility**: All placed artifacts can be removed via the GUI or CLI
+4. **Reversibility**: New journaled placements can be removed when ownership and unchanged content are verified; legacy placements require manual review
 
 ## License
 
@@ -193,3 +193,48 @@ Contributions are welcome! Please read the contributing guidelines and submit pu
 
 - [Hatching Triage](https://tria.ge) for malware analysis API
 - [KivyMD](https://kivymd.readthedocs.io/) for Material Design components
+
+
+## Safe placement and evidence workflow
+
+The current backend supports exact file and directory existence recipes on desktop platforms and explicit new-key/typed-value Windows registry recipes in reviewed namespaces. The registry backend supports both 32-bit and 64-bit views. Existing objects are never adopted or overwritten. Parent directories/registry keys must exist; prerequisites are explicit recipes. Relative paths, unresolved variables, wildcards, network/device paths, symlinks/reparse points, and unsupported operations are rejected.
+
+| Capability | Windows | Linux / macOS | Android |
+| --- | --- | --- | --- |
+| Extract report candidates | Yes | Yes | Yes |
+| File/directory existence placement | Implemented; locally tested | Implemented; CI configured | Experimental app-writable files only |
+| New registry key / typed value | Implemented; synthetic HKCU test | Not applicable | Not applicable |
+| Privileged helper | UAC with completion check | PolicyKit/sudo or admin prompt; native validation pending | Disabled |
+| Processes, WMI, packages, properties, mutexes | Extracted only where applicable | Extracted only where applicable | Extracted only |
+| Demonstrated malware efficacy | Untested | Untested | Untested |
+
+An ownership journal lives at `~/.evasion_artifact_placer/placement-journal.db`. Do not delete it while decoys remain placed. Missing, externally changed, replaced, or legacy objects are preserved for review. Directory removal preserves other contents. The GUI previews each plan and performs operations off its UI thread. `Placeable` means a supported recipe, not an efficacy claim. Evidence scores describe observation strength, not protection probability.
+
+No API key is needed for the bundled candidate catalog, placement commands, or benign probes:
+
+```powershell
+python -m extractor.cli placement catalog
+python -m extractor.cli placement catalog --recipe vmware-software-key > recipe.json
+python -m extractor.cli placement plan recipe.json
+# Explicit mutation: review the plan and compatibility notes first.
+python -m extractor.cli placement apply recipe.json --elevate
+python -m extractor.cli placement status
+python -m extractor.cli placement remove <operation-id> --elevate
+python -m extractor.cli placement probe --output output/benign-probes.json
+```
+
+Recipe input accepts JSON in UTF-8, UTF-16, or UTF-32, including Windows PowerShell redirection. The CLI accepts a complete Artifact JSON model or a flattened GUI record. A user-space alternative to a system path is not substituted, because that would change the check's meaning.
+
+To inspect an external catalog, provide its detached signature and an independently trusted public key:
+
+```text
+python -m extractor.cli placement catalog --path catalog.json --signature catalog.sig --trusted-key maintainer.pub --minimum-version 2
+```
+
+The bundled catalog contains authored Windows candidates with expiry/retest dates and no redistributed private reports. It has **no measured malware efficacy**. External signature verification requires the `cryptography` dependency. See [validation protocol](docs/validation-protocol.md) for experimental design, result formats, signing, and release requirements.
+
+Database migrations preserve legacy rows, migrate canonical artifact IDs and placement references, and version processed samples so new extractors can revisit reports. New observations are keyed by sample/report/task and sample counts are deduplicated. Unknown observation times remain unknown. GUI credentials migrate out of the ordinary settings table; without a supported credential-store backend they are available for the current session only. Existing backups may still contain old settings and must be managed separately.
+
+Network downloads run in isolated workers with a total deadline, bounded response sizes and retries, and no credential-forwarding redirects. Workers are terminated on deadline. This desktop transport is not validated for Android packaging.
+
+Run `python -m pytest -q` for regression tests. CI covers the core on Windows, Linux and macOS with Python 3.10/3.12; native elevation and malware studies require dedicated environments. Review [contributing guidelines](CONTRIBUTING.md) before adding recipes.

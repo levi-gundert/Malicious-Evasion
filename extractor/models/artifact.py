@@ -95,6 +95,8 @@ class Provenance(BaseModel):
     sample_sha1s: list[str] = Field(default_factory=list)   # SHA1 hashes
     sample_ids: list[str] = Field(default_factory=list)     # Triage sample IDs
     families: list[str] = Field(default_factory=list)
+    # Full identities for exact deduplication; display/link lists remain capped.
+    sample_keys: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     
     @field_validator("sample_hashes", "sample_sha1s", "sample_ids")
@@ -120,6 +122,14 @@ class Deception(BaseModel):
     plant_as: str = ""  # file, directory, symlink, etc.
     permissions: str = ""  # e.g., "755" for Linux
     notes: str = ""
+    registry_name: str = ""
+    registry_type: str = ""
+    registry_data: str | int = ""
+    registry_view: int = 64
+    validation_status: str = "candidate"
+    validated_at: datetime | None = None
+    retest_after: datetime | None = None
+    evidence: list[str] = Field(default_factory=list)
 
 
 class Artifact(BaseModel):
@@ -213,8 +223,8 @@ def create_file_artifact(
         ),
         metadata=Metadata(
             evasion_purpose=evasion_purpose,
-            first_seen=datetime.now(timezone.utc),
-            last_seen=datetime.now(timezone.utc),
+            first_seen=None,
+            last_seen=None,
         ),
         provenance=provenance,
         deception=Deception(
@@ -256,8 +266,8 @@ def create_property_artifact(
         ),
         metadata=Metadata(
             evasion_purpose=EvasionPurpose.EMULATOR,
-            first_seen=datetime.now(timezone.utc),
-            last_seen=datetime.now(timezone.utc),
+            first_seen=None,
+            last_seen=None,
         ),
         provenance=provenance,
         deception=Deception(
@@ -302,8 +312,8 @@ def create_registry_artifact(
         ),
         metadata=Metadata(
             evasion_purpose=EvasionPurpose.VM,
-            first_seen=datetime.now(timezone.utc),
-            last_seen=datetime.now(timezone.utc),
+            first_seen=None,
+            last_seen=None,
         ),
         provenance=provenance,
         deception=Deception(
@@ -347,8 +357,8 @@ def create_process_artifact(
         ),
         metadata=Metadata(
             evasion_purpose=EvasionPurpose.VM if "vm" in category.lower() else EvasionPurpose.RESEARCHER_TOOLS,
-            first_seen=datetime.now(timezone.utc),
-            last_seen=datetime.now(timezone.utc),
+            first_seen=None,
+            last_seen=None,
         ),
         provenance=provenance,
         deception=Deception(

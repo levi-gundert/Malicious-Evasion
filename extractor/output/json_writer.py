@@ -1,63 +1,57 @@
-"""JSON output writers for extraction results."""
+"""Versioned, JSON-safe serialization shared by CLI and GUI exports."""
 
 import json
-import logging
 from pathlib import Path
-from typing import Any
+from extractor.models.artifact import Artifact
+from extractor.output.statistics import generate_statistics
 
-logger = logging.getLogger(__name__)
+
+def artifact_to_dict(artifact):
+    return Artifact.model_validate(artifact).model_dump(mode="json")
 
 
-def write_artifacts_json(
-    artifacts: dict[str, list],
-    output_path: Path,
-    pretty: bool = True,
-) -> None:
-    """
-    Write artifacts to a JSON file.
-    
-    Args:
-        artifacts: Dictionary of artifacts by OS
-        output_path: Path to output file
-        pretty: If True, format with indentation
-    """
-    logger.info(f"Writing artifacts to {output_path}")
-    
+def normalize_artifacts(artifacts):
+    values = (
+        (a for group in artifacts.values() for a in group)
+        if isinstance(artifacts, dict)
+        else artifacts
+    )
+    return [Artifact.model_validate(a) for a in values]
+
+
+def write_artifacts_json(artifacts, output_path: Path, pretty: bool = True) -> Path:
+    models = normalize_artifacts(artifacts)
+    groups = {}
+    for artifact in models:
+        groups.setdefault(artifact.os.value, []).append(artifact_to_dict(artifact))
+    data = {
+        "version": "1.0",
+        "statistics": generate_statistics(models).to_dict(),
+        "artifacts": groups,
+    }
+    output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        if pretty:
-            json.dump({"artifacts": artifacts}, f, indent=2, default=str)
-        else:
-            json.dump({"artifacts": artifacts}, f, default=str)
-    
-    logger.info(f"Wrote {sum(len(v) for v in artifacts.values())} artifacts")
+    output_path.write_text(
+        json.dumps(data, indent=2 if pretty else None), encoding="utf-8"
+    )
+    return output_path
 
 
-def write_per_os_json(
-    artifacts: dict[str, list],
-    output_dir: Path,
-    pretty: bool = True,
-) -> None:
-    """
-    Write separate JSON files for each OS.
-    
-    Args:
-        artifacts: Dictionary of artifacts by OS
-        output_dir: Directory to write files to
-        pretty: If True, format with indentation
-    """
+def write_per_os_json(artifacts, output_dir: Path, pretty: bool = True) -> list[Path]:
+    groups = {}
+    for artifact in normalize_artifacts(artifacts):
+        groups.setdefault(artifact.os.value, []).append(artifact_to_dict(artifact))
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    for os_type, os_artifacts in artifacts.items():
-        if not os_artifacts:
-            continue
-        
-        output_path = output_dir / f"{os_type}_artifacts.json"
-        logger.info(f"Writing {len(os_artifacts)} {os_type} artifacts to {output_path}")
-        
-        with open(output_path, "w", encoding="utf-8") as f:
-            if pretty:
-                json.dump({"os": os_type, "artifacts": os_artifacts}, f, indent=2, default=str)
-            else:
-                json.dump({"os": os_type, "artifacts": os_artifacts}, f, default=str)
+    paths = []
+    for os_type, records in sorted(groups.items()):
+        path = output_dir / f"artifacts_{os_type}.json"
+        path.write_text(
+            json.dumps(
+                {"version": "1.0", "os": os_type, "artifacts": records},
+                indent=2 if pretty else None,
+            ),
+            encoding="utf-8",
+        )
+        paths.append(path)
+    return paths

@@ -61,8 +61,20 @@ def merge_artifacts(existing: Artifact, new: Artifact) -> Artifact:
     merged_data = existing.model_dump()
     
     # Update provenance
-    merged_data["provenance"]["sample_count"] = existing.provenance.sample_count + new.provenance.sample_count
+    def identities(provenance):
+        if provenance.sample_keys:
+            return set(provenance.sample_keys)
+        if provenance.sample_hashes:
+            return {"sha256:" + value for value in provenance.sample_hashes}
+        return {"triage:" + value for value in provenance.sample_ids}
+
+    keys = identities(existing.provenance) | identities(new.provenance)
+    merged_data["provenance"]["sample_keys"] = sorted(keys)
+    # Unknown legacy counts cannot safely be added as independent observations.
+    merged_data["provenance"]["sample_count"] = len(keys) if keys else max(existing.provenance.sample_count, new.provenance.sample_count)
     merged_data["provenance"]["sample_hashes"] = combined_hashes
+    for field in ("sample_ids", "sample_sha1s"):
+        merged_data["provenance"][field] = sorted(set(getattr(existing.provenance, field)) | set(getattr(new.provenance, field)))[:100]
     merged_data["provenance"]["families"] = combined_families
     
     # Update metadata timestamps

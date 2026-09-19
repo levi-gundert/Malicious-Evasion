@@ -1,51 +1,59 @@
-"""YAML output writers for deception configurations."""
+"""Export candidate recipes; exporting never executes a placement."""
 
-import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+import yaml
+from extractor.output.json_writer import artifact_to_dict, normalize_artifacts
 
-logger = logging.getLogger(__name__)
 
-
-def write_deception_yaml(
-    artifacts: dict[str, list],
-    output_path: Path,
-) -> None:
-    """
-    Write deception configuration YAML.
-    
-    Args:
-        artifacts: Dictionary of artifacts by OS
-        output_path: Path to output file
-    """
-    try:
-        import yaml
-    except ImportError:
-        logger.warning("PyYAML not installed, skipping YAML output")
-        return
-    
-    logger.info(f"Writing deception config to {output_path}")
-    
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Build deception config structure
-    config = {
-        "version": "1.0",
-        "artifacts": {},
+def artifact_to_deception_entry(artifact):
+    a = artifact_to_dict(artifact)
+    return {
+        "id": a["id"],
+        "value": a["match_criteria"]["value"],
+        "match_type": a["match_criteria"]["type"],
+        "confidence": a["provenance"]["confidence"],
+        "sample_count": a["provenance"]["sample_count"],
+        "recommended_value": a["deception"]["recommended_value"],
+        "notes": a["deception"]["notes"],
+        "artifact": a,
     }
-    
-    for os_type, os_artifacts in artifacts.items():
-        if not os_artifacts:
-            continue
-        
-        config["artifacts"][os_type] = []
-        for artifact in os_artifacts:
-            if hasattr(artifact, "model_dump"):
-                config["artifacts"][os_type].append(artifact.model_dump())
-            elif isinstance(artifact, dict):
-                config["artifacts"][os_type].append(artifact)
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-    
-    logger.info(f"Wrote deception config for {len(config['artifacts'])} OS types")
+
+
+def write_deception_yaml(artifacts, output_path: Path) -> list[Path]:
+    models = normalize_artifacts(artifacts)
+    output_path = Path(output_path)
+    if output_path.suffix in (".yaml", ".yml"):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"version": "1.0", "artifacts": {}}
+        for artifact in models:
+            data["artifacts"].setdefault(artifact.os.value, []).append(
+                artifact_to_dict(artifact)
+            )
+        output_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        return [output_path]
+    groups = {}
+    categories = {
+        "file": "files",
+        "property": "system_properties",
+        "registry": "registry_keys",
+        "process": "processes",
+    }
+    for artifact in models:
+        data = groups.setdefault(
+            artifact.os.value, {"version": "1.0", "os": artifact.os.value}
+        )
+        data.setdefault(
+            categories.get(artifact.artifact_type.value, artifact.artifact_type.value),
+            [],
+        ).append(artifact_to_deception_entry(artifact))
+    output_path.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for os_type, data in sorted(groups.items()):
+        path = output_path / f"{os_type}_deception_config.yaml"
+        header = f"# {os_type.upper()} candidate recipes\n# Generated: {datetime.now(timezone.utc).isoformat()}\n# Confidence describes observations, not protection efficacy.\n"
+        path.write_text(
+            header + yaml.safe_dump(data, sort_keys=False), encoding="utf-8"
+        )
+        paths.append(path)
+    return paths

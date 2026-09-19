@@ -91,8 +91,14 @@ class ArtifactCard(MDBoxLayout):
         category = self.artifact_data.get("category", "unknown")
         purpose = (self.artifact_data.get("evasion_purpose") or "evasion").replace("_", " ").title()
         
+        from extractor.placement import make_plan
+        try:
+            make_plan(self.artifact_data)
+            capability = "Placeable candidate"
+        except (ValueError, OSError):
+            capability = "Extracted only"
         meta_label = MDLabel(
-            text=f"{os_type} | {category} | {purpose}",
+            text=f"{os_type} | {category} | {capability}",
             font_style="Caption",
             theme_text_color="Custom",
             text_color=(0.604, 0.627, 0.651, 1),
@@ -107,9 +113,9 @@ class ArtifactCard(MDBoxLayout):
         sample_id = self.artifact_data.get("source_sample_id", "")
         
         if sample_id:
-            info_text = f"Conf: {conf_pct} | Seen: {sample_count}x | [ref=triage]{sample_id}[/ref]"
+            info_text = f"Evidence: {conf_pct} | Samples: {sample_count} | [ref=triage]{sample_id}[/ref]"
         else:
-            info_text = f"Conf: {conf_pct} | Seen: {sample_count}x"
+            info_text = f"Evidence: {conf_pct} | Samples: {sample_count} | Efficacy untested"
         
         self.info_label = MDLabel(
             text=info_text,

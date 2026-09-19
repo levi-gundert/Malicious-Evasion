@@ -427,7 +427,7 @@ class SettingsScreen(MDScreen):
         
         settings = app.database.get_settings()
         
-        self.api_key_input.text = settings.get("api_key", "")
+        self.api_key_input.text = app.credentials.get()
         self.update_freq_spinner.text = settings.get("update_frequency", "Daily")
         self.auto_update_switch.active = settings.get("auto_update", True)
         self.samples_per_update_input.text = str(settings.get("samples_per_update", 50))
@@ -449,7 +449,6 @@ class SettingsScreen(MDScreen):
             samples_per_update = 50
         
         settings = {
-            "api_key": self.api_key_input.text,
             "update_frequency": self.update_freq_spinner.text,
             "auto_update": self.auto_update_switch.active,
             "samples_per_update": samples_per_update,
@@ -457,10 +456,11 @@ class SettingsScreen(MDScreen):
             "show_admin": self.show_admin_switch.active,
         }
         
+        storage = app.credentials.save(self.api_key_input.text)
         app.database.save_settings(settings)
         logger.info(f"Settings saved (samples_per_update: {samples_per_update})")
         
-        self._show_message("Success", "Settings saved successfully!")
+        self._show_message("Success", f"Settings saved. API key: {storage}.")
     
     def _on_show_key_toggle(self, switch, active):
         """Toggle API key visibility."""
@@ -493,7 +493,7 @@ class SettingsScreen(MDScreen):
         app = MDApp.get_running_app()
         if app and app.database:
             app.database.clear_placed_log()
-            self._show_message("Success", "Placed artifacts log cleared.")
+            self._show_message("Success", "Removed entries cleared. Active ownership records are preserved.")
     
     def _clear_all_data(self):
         """Clear all cached data (with confirmation)."""
@@ -522,7 +522,11 @@ class SettingsScreen(MDScreen):
         
         app = MDApp.get_running_app()
         if app and app.database:
-            app.database.clear_all()
+            try:
+                app.database.clear_all()
+            except ValueError as exc:
+                self._show_message("Data preserved", str(exc))
+                return
             self._show_message("Success", "All data cleared.")
     
     def _show_message(self, title: str, message: str):

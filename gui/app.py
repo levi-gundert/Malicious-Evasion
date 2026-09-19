@@ -124,9 +124,16 @@ class EvasionArtifactApp(MDApp):
         from gui.services.database import ArtifactDatabase
         self.database = ArtifactDatabase()
         self.database.initialize()
+        from gui.services.credentials import CredentialStore
+        self.credentials = CredentialStore()
+        self.credentials.migrate(self.database)
         
         logger.info(f"Database initialized with {self.database.get_artifact_count()} artifacts")
         
+        from gui.services.placement_engine import PlacementEngine
+        self.placement_engine = PlacementEngine(self.current_os)
+        self.database.sync_placement_status(self.placement_engine.core.reconcile())
+
         # Initialize and start update service
         from gui.services.updater import UpdateService
         self.updater = UpdateService()

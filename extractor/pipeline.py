@@ -140,6 +140,17 @@ def extract_sample(
     extractor = extractor_class()
     try:
         artifacts = extractor.extract(context)
+        # Reprocessing a report must not make the observation look recent.
+        observed_at = metadata.triage.completed_at or metadata.triage.submitted_at
+        for artifact in artifacts:
+            artifact.metadata.first_seen = observed_at
+            artifact.metadata.last_seen = observed_at
+            artifact.provenance.sample_hashes = [metadata.sha256]
+            artifact.provenance.sample_keys = ["sha256:" + metadata.sha256]
+            artifact.provenance.sample_sha1s = [metadata.sha1] if metadata.sha1 else []
+            artifact.provenance.sample_ids = [metadata.triage.sample_id] if metadata.triage.sample_id else []
+            artifact.provenance.families = metadata.classification.families
+            artifact.provenance.sample_count = 1
         logger.info(f"Extracted {len(artifacts)} raw artifacts")
     except Exception as e:
         logger.error(f"Extraction failed: {e}")

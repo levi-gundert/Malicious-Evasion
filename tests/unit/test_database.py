@@ -9,35 +9,22 @@ import pytest
 import sqlite3
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 
 class TestProcessedSamplesTracking:
     """Tests for the processed samples tracking feature."""
     
     @pytest.fixture
-    def db(self):
-        """Create a temporary database for testing."""
-        # Create a temporary file for the database
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = Path(f.name)
-        
-        # Import here to avoid Kivy initialization issues in test environment
-        # We'll mock the Kivy App.get_running_app() call
-        with patch("kivy.app.App.get_running_app") as mock_app:
-            mock_app.return_value = None
-            
-            from gui.services.database import ArtifactDatabase
-            
-            database = ArtifactDatabase(db_path=db_path)
-            database.initialize()
-            
+    def db(self, tmp_path):
+        """An explicit database path never initializes Kivy."""
+        from gui.services.database import ArtifactDatabase
+        database = ArtifactDatabase(db_path=tmp_path / "artifacts.db")
+        database.initialize()
+        try:
             yield database
-            
-            # Cleanup
+        finally:
             database.close()
-            db_path.unlink(missing_ok=True)
-    
+
     def test_is_sample_processed_returns_false_for_new_sample(self, db):
         """A sample that was never processed should return False."""
         result = db.is_sample_processed("260128-newsampl")
@@ -161,6 +148,7 @@ class TestProcessedSamplesTracking:
             "artifacts_extracted",
             "score",
             "sha256",
+            "extractor_version",
         }
         
         assert expected_columns == columns

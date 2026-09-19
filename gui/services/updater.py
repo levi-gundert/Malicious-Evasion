@@ -256,7 +256,7 @@ class UpdateService:
         
         try:
             # Get API key
-            api_key = app.database.get_setting("api_key")
+            api_key = app.credentials.get()
             
             if not api_key:
                 self._on_error("No API key configured")
@@ -365,6 +365,9 @@ class UpdateService:
                             logger.debug(f"No overview for {sample_id}, skipping")
                             continue
                         
+                        if data.get("behavioral_report") is None:
+                            continue  # A failed download must remain retryable.
+
                         # Extract sample hashes from overview
                         sample_info = overview.get("sample", {})
                         sample_sha1 = sample_info.get("sha1", "")
@@ -402,6 +405,9 @@ class UpdateService:
                             os_type=detected_os,
                         )
                         
+                        if result.errors:
+                            continue
+
                         # Import artifacts to database - only for the requested OS
                         # result.artifacts is a dict keyed by OS
                         requested_os_key = os_type.lower()
@@ -418,6 +424,7 @@ class UpdateService:
                         artifacts_for_os = result.artifacts.get(requested_os_key, [])
                         if not artifacts_for_os:
                             logger.debug(f"No {requested_os_key} artifacts found for {sample_id}")
+                            app.database.mark_sample_processed(sample_id, detected_os.value, 0, score, sample_sha256)
                             continue
 
                         for artifact in artifacts_for_os:
@@ -431,28 +438,18 @@ class UpdateService:
                             existing = app.database.get_artifact_by_id(artifact_dict["id"])
 
                             if existing:
-                                # Update existing artifact - also update source info if missing
-                                update_data = {
-                                    "confidence": max(existing["confidence"], artifact_dict["confidence"]),
-                                    "sample_count": existing["sample_count"] + 1,
-                                    "last_seen": datetime.now(timezone.utc).isoformat(),
-                                }
-                                # Populate source info if it was missing before
-                                if not existing.get("source_sha1") and sample_sha1:
-                                    update_data["source_sha1"] = sample_sha1
-                                if not existing.get("source_sha256") and sample_sha256:
-                                    update_data["source_sha256"] = sample_sha256
-                                if not existing.get("source_sample_id") and sample_id:
-                                    update_data["source_sample_id"] = sample_id
-                                if not existing.get("triage_url") and sample_id:
-                                    update_data["triage_url"] = f"https://tria.ge/{sample_id}"
-                                
-                                app.database.update_artifact(artifact_dict["id"], update_data)
+                                app.database.update_artifact(artifact_dict["id"], {"deception": artifact_dict["deception"], "provenance_json": artifact_dict["provenance_json"]})
                                 total_updated += 1
                             else:
-                                app.database.add_artifact(artifact_dict)
+                                if not app.database.add_artifact(artifact_dict):
+                                    raise RuntimeError("Could not save extracted artifact")
                                 total_new += 1
-                                logger.debug(f"Added artifact {artifact_dict['id']} with SHA1: {sample_sha1[:12] if sample_sha1 else 'N/A'}...")
+                            app.database.record_observation(
+                                artifact_dict["id"], sample_sha256 or sample_id, sample_id,
+                                data.get("task_id", "unknown"), artifact_dict["last_seen"],
+                                artifact.provenance.families,
+                                {"report_url": artifact_dict["triage_url"], "match": artifact.match_criteria.model_dump(mode="json"), "description": artifact.metadata.description},
+                            )
 
                             total_artifacts += 1
                         
@@ -517,41 +514,9 @@ class UpdateService:
             sample_sha1: SHA1 hash of the source sample
             sample_sha256: SHA256 hash of the source sample
         """
-        import hashlib
-        from extractor.models.artifact import Artifact
-        
-        # Generate deterministic artifact ID using SHA256 (same format as seeded artifacts)
-        # This ensures the same artifact value always produces the same ID,
-        # even across Python restarts (unlike hash() which is randomized)
-        hash_input = f"{artifact.os.value}-{artifact.artifact_type.value}-{artifact.match_criteria.value}"
-        hash_value = hashlib.sha256(hash_input.encode()).hexdigest()[:8]
-        artifact_id = f"art-{artifact.os.value}-{artifact.artifact_type.value}-{hash_value}"
-        
-        # Build Triage URL from sample ID (using private cloud)
-        # Private cloud samples use private.tria.ge, public use tria.ge
-        triage_url = f"https://private.tria.ge/{sample_id}" if sample_id else ""
-        
-        return {
-            "id": artifact_id,
-            "os": artifact.os.value,
-            "category": artifact.category,
-            "artifact_type": artifact.artifact_type.value,
-            "value": artifact.match_criteria.value,
-            "match_type": artifact.match_criteria.type.value,
-            "case_sensitive": artifact.match_criteria.case_sensitive,
-            "confidence": artifact.provenance.confidence if artifact.provenance else 0.5,
-            "sample_count": artifact.provenance.sample_count if artifact.provenance else 1,
-            "privilege_level": self._determine_privilege(artifact.os.value, artifact.match_criteria.value),
-            "description": artifact.metadata.description if artifact.metadata else "",
-            "evasion_purpose": artifact.metadata.evasion_purpose.value if artifact.metadata and artifact.metadata.evasion_purpose else None,
-            "source_sha1": sample_sha1,
-            "source_sha256": sample_sha256,
-            "source_sample_id": sample_id,
-            "triage_url": triage_url,
-            "first_seen": datetime.now(timezone.utc).isoformat(),
-            "last_seen": datetime.now(timezone.utc).isoformat(),
-        }
-    
+        from extractor.records import artifact_record
+        return artifact_record(artifact, sample_id, sample_sha1, sample_sha256)
+
     def _determine_privilege(self, os_type: str, value: str) -> str:
         """Determine privilege level for an artifact."""
         value_lower = value.lower()

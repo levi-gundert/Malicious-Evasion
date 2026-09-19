@@ -109,7 +109,9 @@ def probe_command(output):
     """Benign file/directory probes in an isolated temporary directory."""
     checks = []
     with tempfile.TemporaryDirectory(prefix="meap-probe-") as directory:
-        root = Path(directory)
+        # Normalize our own workspace (macOS /var symlink, Windows 8.3 TEMP).
+        # User-supplied recipe paths still go through strict path validation.
+        root = Path(directory).resolve(strict=True)
         engine = SafePlacement(root / "state" / "placement-journal.db")
         for kind in ("file", "directory"):
             target = root / kind

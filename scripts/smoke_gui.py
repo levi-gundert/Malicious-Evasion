@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 def main():
     with tempfile.TemporaryDirectory(prefix="meap-gui-smoke-") as directory:
+        directory = str(Path(directory).resolve(strict=True))
         os.environ["KIVY_HOME"] = directory
         os.environ["KIVY_NO_ARGS"] = "1"
         os.environ["KIVY_NO_FILELOG"] = "1"

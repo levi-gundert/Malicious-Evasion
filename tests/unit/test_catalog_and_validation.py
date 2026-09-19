@@ -52,7 +52,24 @@ def test_expiry_and_rollback_rejected(tmp_path):
         load_catalog(*paths, minimum_version=3)
 
 
-def test_benign_probe_cli(tmp_path):
+@pytest.mark.parametrize("workspace_alias", [False, True])
+def test_benign_probe_cli(tmp_path, monkeypatch, workspace_alias):
+    if workspace_alias:
+        from contextlib import contextmanager
+        from pathlib import Path
+        from extractor import placement_cli
+
+        temporary_directory = placement_cli.tempfile.TemporaryDirectory
+
+        @contextmanager
+        def aliased_workspace(**kwargs):
+            with temporary_directory(**kwargs) as directory:
+                root = Path(directory)
+                yield str(root / ".." / root.name)
+
+        monkeypatch.setattr(
+            placement_cli.tempfile, "TemporaryDirectory", aliased_workspace
+        )
     result = CliRunner().invoke(
         cli, ["placement", "probe", "--output", str(tmp_path / "report.json")]
     )

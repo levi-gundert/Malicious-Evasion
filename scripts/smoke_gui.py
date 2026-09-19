@@ -14,6 +14,12 @@ def main():
         os.environ["KIVY_HOME"] = directory
         os.environ["KIVY_NO_ARGS"] = "1"
         os.environ["KIVY_NO_FILELOG"] = "1"
+        from kivy.config import Config
+
+        # This hidden-window smoke test does not exercise physical input devices.
+        # Their Windows hooks require a foreground window on hosted runners.
+        Config.remove_option("input", "wm_pen")
+        Config.remove_option("input", "wm_touch")
         from kivy.clock import Clock
         from kivy.core.window import Window
         from gui.app import EvasionArtifactApp
